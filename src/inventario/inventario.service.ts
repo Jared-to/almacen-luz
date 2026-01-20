@@ -9,7 +9,6 @@ import { inventarioInicial } from './entities/inventario-inicial.entity';
 import { MovimientosAlmacenService } from './service/movimientos-almacen.service';
 import { ProductosService } from 'src/productos/productos.service';
 import { AlmacenesService } from 'src/almacenes/almacenes.service';
-import { Producto } from 'src/productos/entities/producto.entity';
 import { TraspasoProductoDto } from './dto/traspaso-producto.dto';
 
 @Injectable()
@@ -19,6 +18,7 @@ export class InventarioService {
     private readonly inventarioRepository: Repository<Inventario>,
     @InjectRepository(inventarioInicial)
     private readonly inventarioInicialRepository: Repository<inventarioInicial>,
+
     private readonly movimientosService: MovimientosAlmacenService,
     @Inject(forwardRef(() => ProductosService))
     private readonly productosService: ProductosService,
@@ -32,75 +32,10 @@ export class InventarioService {
       relations: ['product', 'product.categoria']
     })
   }
-  //agregar inventario inicial
-  async inventarioInicial(inventarioInicialDto: InventarioInicialDto): Promise<Inventario[]> {
-    const { almacen_id, productos } = inventarioInicialDto;
-    try {
 
-
-      // Crear una lista para almacenar los inventarios creados o actualizados
-      const inventarios = [];
-
-      for (const producto of productos) {
-        const { producto_id, cantidad, precio_compra, precio_venta, sku } = producto;
-
-        //  Registrar en la tabla `inventarioInicial`
-        const registroInicial = this.inventarioInicialRepository.create({
-          almacen_id,
-          cantidad,
-          fecha: new Date().toISOString(),
-          precio_compra,
-          precio_venta,
-          producto_id,
-        });
-
-        await this.inventarioInicialRepository.save(registroInicial);
-
-        //  Actualizar o crear en la tabla `inventario`
-        let inventario = await this.inventarioRepository.findOne({
-          where: { almacen: { id: almacen_id }, product: { id: producto_id } },
-        });
-
-        let product = await this.productosService.findOneProducto(producto_id);
-        let almacen = await this.AlmacenService.findOne(almacen_id);
-        if (!inventario) {
-          // Crear nuevo registro en inventario general 
-          inventario = this.inventarioRepository.create({
-            almacen: almacen,
-            product: product,
-            stock: cantidad,
-            precio_compra
-          });
-        } else {
-          // Incrementar stock si ya existe
-          inventario.stock += cantidad;
-        }
-
-        const inventarioGuardado = await this.inventarioRepository.save(inventario);
-
-        // Agregar a la lista de inventarios procesados
-        inventarios.push(inventarioGuardado);
-
-        //  Registrar movimiento de ingreso
-        await this.movimientosService.registrarIngreso({
-          almacenId: almacen_id,
-          productoId: producto_id,
-          cantidad,
-          sku,
-          descripcion: 'INVENTARIO INICIAL',
-        });
-      }
-
-      return inventarios;
-    } catch (error) {
-      console.log(error);
-
-      throw new InternalServerErrorException('Código de barras duplicado.');
-    }
-  }
 
   async agregarStock(createInventarioDto: CreateInventarioDto): Promise<Inventario> {
-    const { almacenId, cantidad, productoId, sku, fechaExpiracion } = createInventarioDto;
+    const { almacenId, cantidad, productoId, sku, fechaExpiracion, costoUnit } = createInventarioDto;
 
     let inventario = await this.inventarioRepository.findOne({
       where: { almacen: { id: almacenId }, product: { id: productoId } },
@@ -114,11 +49,12 @@ export class InventarioService {
         product: product,
         stock: cantidad,
         sku,
-        fechaExpiracion
+        fechaExpiracion,
+        costoUnit
       });
     } else {
       inventario.stock = inventario.stock + Number(cantidad);
-
+      inventario.costoUnit = costoUnit;
     }
 
     // Guardar en la base de datos
@@ -206,33 +142,48 @@ export class InventarioService {
 
     return inventario; // Retornar el inventario actualizado
   }
-  async agregarStockTransaccional(createInventarioDto: CreateInventarioDto, queryRunner: QueryRunner): Promise<Inventario> {
-    const { almacenId, cantidad, productoId, sku, fechaExpiracion } = createInventarioDto;
+  async agregarStockTransaccional(
+    createInventarioDto: CreateInventarioDto,
+    queryRunner: QueryRunner
+  ): Promise<Inventario> {
+
+    const {
+      almacenId,
+      cantidad,
+      productoId,
+      sku,
+      fechaExpiracion,
+      costoUnit
+    } = createInventarioDto;
 
     let inventario = await queryRunner.manager.findOne(Inventario, {
-      where: { almacen: { id: almacenId }, product: { id: productoId } },
+      where: {
+        almacen: { id: almacenId },
+        product: { id: productoId },
+      },
+      relations: ['almacen']
     });
 
     if (!inventario) {
-      let almacen = await this.AlmacenService.findOne(almacenId);
+
       inventario = queryRunner.manager.create(Inventario, {
-        almacen: almacen,
+        almacen: { id: almacenId },
         product: { id: productoId },
-        stock: cantidad,
-        sku: sku,
-        fechaExpiracion
+        stock: Number(cantidad),
+        sku,
+        fechaExpiracion,
+        costoUnit
       });
+
     } else {
-
-      inventario.stock = inventario.stock + parseFloat(cantidad);
-
+      inventario.stock += Number(cantidad);
+      inventario.costoUnit = costoUnit;
     }
 
-    // Guardar en la base de datos
-    const inventarioG = await queryRunner.manager.save(Inventario, inventario);
 
-    return inventarioG; // Retornar el inventario actualizado
+    return await queryRunner.manager.save(inventario);
   }
+
 
   // Descontar stock de un producto en un almacén
   async descontarStockTransaccional(createInventarioDto: CreateInventarioDto, queryRunner: QueryRunner): Promise<Inventario> {
@@ -273,7 +224,8 @@ export class InventarioService {
         'producto.nombre AS producto_nombre',
         'producto.unidad_medida AS unidad_medida',
         'producto.marca AS marca',
-        'producto.precio_venta AS precio_venta',
+        'producto.precioVenta AS precio_venta',
+        'producto.precioVentaMin AS precio_min_venta',
         'producto.imagen AS imagen',
         'producto.codigo AS codigo',
         'producto.estado AS estado',
@@ -302,7 +254,8 @@ export class InventarioService {
         'producto.nombre AS producto_nombre',
         'producto.unidad_medida AS unidad_medida',
         'producto.marca AS marca',
-        'producto.precio_venta AS precio_venta',
+        'producto.precioVenta AS precio_venta',
+        'producto.precioVentaMin AS precio_min_venta',
         'producto.imagen AS imagen',
         'producto.codigo AS codigo',
         'producto.estado AS estado',
@@ -331,7 +284,8 @@ export class InventarioService {
         'producto.nombre AS producto_nombre',
         'producto.unidad_medida AS unidad_medida',
         'producto.marca AS marca',
-        'producto.precio_venta AS precio_venta',
+        'producto.precioVenta AS precio_venta',
+        'producto.precioVentaMin AS precio_venta',
         'producto.imagen AS imagen',
         'producto.codigo AS codigo',
         'producto.estado AS estado',
@@ -369,7 +323,7 @@ export class InventarioService {
         'producto.nombre AS alias',
         'producto.imagen AS imagen',
         'producto.marca AS marca',
-        'producto.precio_venta AS precio_venta',
+        'producto.precioVenta AS precio_venta',
         'inventario.sku AS sku',
         'producto.unidad_medida AS unidad_medida',
         'categoria.nombre AS categoria',
@@ -408,13 +362,12 @@ export class InventarioService {
         'inventario.almacen AS almacen_nombre',
         'almacen.nombre AS almacen_nombre',
         'inventario.stock AS stock',
-        'inventario.precio_compra AS precio_compra',
         'inventario.codigo_barras AS codigo_barras',
         'producto.alias AS producto_nombre',
         'producto.descripcion AS producto_descripcion',
         'producto.unidad_medida AS unidad_medida',
         'inventario.sku AS sku',
-        'producto.precio_venta AS precio_venta',
+        'inventario.producto AS precio_venta',
         'producto.imagen AS imagen',
         'producto.codigo AS codigo',
       ])
@@ -430,7 +383,7 @@ export class InventarioService {
   }
 
 
-  async obtenerInfoProducto(id_inventario: string): Promise<any> {
+  async obtenerInfoProducto(id_inventario: string): Promise<Inventario> {
 
     const productoInfo = await this.inventarioRepository.findOne({ where: { id: id_inventario }, relations: ['product', 'almacen', 'product.categoria'] })
 
@@ -441,18 +394,13 @@ export class InventarioService {
     return productoInfo
   }
 
-  async obtenerProductoPorAlmacenYProducto(almacenId: string, productoId: string): Promise<any> {
+  async obtenerProductoPorAlmacenYProducto(almacenId: string, productoId: string): Promise<Inventario> {
 
     // Consulta para obtener información del producto específico en el almacén
     const resultado = await this.inventarioRepository.findOne({ where: { almacen: { id: almacenId }, product: { id: productoId } }, relations: ['product'] })
 
-    const product = await this.productosService.findOneProducto(resultado.product.id);
 
-    return {
-      ...resultado,
-      ...product,
-      total_stock: resultado.stock
-    }
+    return resultado
 
   }
 
@@ -460,7 +408,7 @@ export class InventarioService {
     const inventario = await this.inventarioRepository.find({
       where: { stock: Between(1, 9), }, //stock<10 
       order: { stock: 'ASC' },
-      relations: ['product','almacen'],
+      relations: ['product', 'almacen'],
     });
 
     return inventario;
@@ -479,7 +427,7 @@ export class InventarioService {
         fechaExpiracion: Between(hoy, fechaLimite),
       },
       order: { fechaExpiracion: 'ASC' },
-      relations: ['product','almacen'],
+      relations: ['product', 'almacen'],
     });
   }
 

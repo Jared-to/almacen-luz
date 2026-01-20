@@ -23,6 +23,12 @@ export class CreateProductoDto {
   @IsString()
   precio_venta: string;
 
+  @IsString()
+  precio_min_venta: string;
+
+  @IsString()
+  precio_compra: string;
+
   @IsDateString()
   fechaExpiracion: Date;
 

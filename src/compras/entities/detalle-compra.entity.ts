@@ -1,10 +1,10 @@
 import { Inventario } from "src/inventario/entities/inventario.entity";
 import { Column, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from "typeorm";
-import { Traspaso } from "./despacho.entity";
+import { Compra } from "./compra.entity";
 
 
-@Entity('detalle-traspasos')
-export class DetalleTraspaso {
+@Entity('detalle-compra')
+export class DetalleCompra {
 
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -17,9 +17,15 @@ export class DetalleTraspaso {
   cantidad: number;
 
   @Column('float')
-  costoUnit: number;
+  precioCompra: number;
 
-  @ManyToOne(() => Traspaso, traspaso => traspaso.detalles)
-  @JoinColumn({ name: 'traspaso_id' }) // Relaciona con la columna 'id' de 'traspasos'
-  traspaso: Traspaso;
+  @Column('float')
+  precioVenta: number;
+
+  @Column('float')
+  precioMinVenta: number;
+
+  @ManyToOne(() => Compra, compra => compra.detalles)
+  @JoinColumn({ name: 'compra_id' }) // Relaciona con la columna 'id' de 'compra'
+  compra: Compra;
 }

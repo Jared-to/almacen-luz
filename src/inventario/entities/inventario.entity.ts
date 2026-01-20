@@ -24,10 +24,9 @@ export class Inventario {
   @Column('text')
   sku: string;
 
+  @Column('float', { nullable: true })
+  costoUnit: number;
+
   @Column('date', { nullable: true })
   fechaExpiracion: Date;
-
-  @Column('float', { nullable: true })
-  precio_compra: number;
-
 }

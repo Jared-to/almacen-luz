@@ -21,6 +21,7 @@ export class TraspasosService {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
+
     try {
       const { detalles, almacenDestino, almacenOrigen, fecha, glosa, user } = createTraspasoDto;
 
@@ -32,7 +33,7 @@ export class TraspasosService {
         throw new NotFoundException('No se encuentra el Almacén');
       }
 
-      // Crear el traspaso, pero aún no guardar los detalles
+      // Crear traspaso
       const traspasoNuevo = queryRunner.manager.create(Traspaso, {
         responsable: { id: user },
         almacenOrigen: almaceOrigen,
@@ -40,72 +41,97 @@ export class TraspasosService {
         fecha,
         glosa,
       });
-
-      // Guardar el traspaso para obtener el ID
       const traspasoGuardado = await queryRunner.manager.save(Traspaso, traspasoNuevo);
 
-      // Procesar los detalles
       for (const element of detalles) {
-        const inventario = await queryRunner.manager.findOne(Inventario, {
+        const inventarioOrigen = await queryRunner.manager.findOne(Inventario, {
           where: { id: element.id_inventario },
           relations: ['product'],
         });
 
-        if (!inventario) {
-          throw new NotFoundException('No se encontró el inventario');
-        }
+        if (!inventarioOrigen) throw new NotFoundException('No se encontró el inventario');
 
-        // Registrar stocks y movimientos
-        await this.inventarioService.agregarStockTransaccional({
-          almacenId: almaceDestino.id,
-          cantidad: Number(element.cantidad),
-          productoId: inventario.product.id,
-          sku: inventario.sku,
-          fechaExpiracion: inventario.fechaExpiracion,
-        }, queryRunner);
+        const cantidad = Number(element.cantidad);
+        const costoUnitOrigen = inventarioOrigen.costoUnit;
 
-        await this.movimientosService.registrarIngresoTransaccional({
-          almacenId: almaceDestino.id,
-          cantidad: Number(element.cantidad),
-          productoId: inventario.product.id,
-          descripcion: 'Traslado',
-          sku: inventario.sku
-        }, queryRunner);
-
+        // -----------------------------
+        // Descontar del almacén origen
+        // -----------------------------
         await this.inventarioService.descontarStockTransaccional({
           almacenId: almaceOrigen.id,
-          cantidad: Number(element.cantidad),
-          productoId: inventario.product.id,
-          sku: inventario.sku
+          cantidad,
+          productoId: inventarioOrigen.product.id,
+          sku: inventarioOrigen.sku,
+          costoUnit: costoUnitOrigen, // usar PPP origen
         }, queryRunner);
 
         await this.movimientosService.registrarSalidaTransaccional({
           almacenId: almaceOrigen.id,
-          cantidad: Number(element.cantidad),
-          productoId: inventario.product.id,
-          descripcion: 'Traslado',
-          sku: inventario.sku
+          cantidad,
+          productoId: inventarioOrigen.product.id,
+          descripcion: `Traslado a ${almaceDestino.nombre}`,
+          sku: inventarioOrigen.sku,
+          costoUnit: costoUnitOrigen,
         }, queryRunner);
 
-        // Crear detalles relacionados al traspaso guardado
+        // -----------------------------
+        // Agregar al almacén destino
+        // -----------------------------
+        let inventarioDestino = await queryRunner.manager.findOne(Inventario, {
+          where: { almacen: { id: almaceDestino.id }, product: { id: inventarioOrigen.product.id } },
+        });
+
+        let costoUnitDestino = costoUnitOrigen;
+
+        if (inventarioDestino) {
+          // Recalcular PPP si ya había stock
+          costoUnitDestino = (
+            inventarioDestino.stock * inventarioDestino.costoUnit +
+            cantidad * costoUnitOrigen
+          ) / (inventarioDestino.stock + cantidad);
+        }
+
+        await this.inventarioService.agregarStockTransaccional({
+          almacenId: almaceDestino.id,
+          cantidad,
+          productoId: inventarioOrigen.product.id,
+          sku: inventarioOrigen.sku,
+          costoUnit: Number(costoUnitDestino.toFixed(4)),
+        }, queryRunner);
+
+        await this.movimientosService.registrarIngresoTransaccional({
+          almacenId: almaceDestino.id,
+          cantidad,
+          productoId: inventarioOrigen.product.id,
+          descripcion: `Traslado desde ${almaceOrigen.nombre}`,
+          sku: inventarioOrigen.sku,
+          costoUnit: Number(costoUnitDestino.toFixed(4)),
+        }, queryRunner);
+
+        // -----------------------------
+        // Guardar detalle del traspaso
+        // -----------------------------
         const detalleTraspaso = queryRunner.manager.create(DetalleTraspaso, {
-          inventario,
-          cantidad: element.cantidad,
-          traspaso: traspasoGuardado, // Usar el traspaso guardado con ID
+          inventario: inventarioOrigen,
+          cantidad,
+          traspaso: traspasoGuardado,
+          costoUnit: costoUnitOrigen
         });
 
         await queryRunner.manager.save(DetalleTraspaso, detalleTraspaso);
       }
 
-      await queryRunner.commitTransaction(); // Confirmar la transacción
+      await queryRunner.commitTransaction();
+      return traspasoGuardado;
     } catch (error) {
       console.error(error);
       await queryRunner.rollbackTransaction();
       throw new InternalServerErrorException('No se pudo crear el traspaso');
     } finally {
-      await queryRunner.release(); // Liberar el QueryRunner
+      await queryRunner.release();
     }
   }
+
 
 
   async findAll(): Promise<Traspaso[]> {
@@ -144,132 +170,130 @@ export class TraspasosService {
     try {
       const { detalles, almacenDestino, almacenOrigen, fecha, glosa } = updateTraspasoDto;
 
-      // 1. Obtener traspaso original
+      // 1️⃣ Obtener traspaso original
       const traspasoExistente = await queryRunner.manager.findOne(Traspaso, {
         where: { id },
-        relations: ['detalles', 'detalles.inventario', 'almacenOrigen', 'almacenDestino', 'responsable'],
+        relations: ['detalles', 'detalles.inventario', 'almacenOrigen', 'almacenDestino'],
       });
 
-      if (!traspasoExistente) {
-        throw new NotFoundException(`El traspaso con ID ${id} no existe`);
-      }
+      if (!traspasoExistente) throw new NotFoundException(`Traspaso no encontrado`);
 
-      // 2. Validar almacenes nuevos
-      const almacenOrigenEntity = await queryRunner.manager.findOne(Almacen, { where: { id: almacenOrigen } });
-      const almacenDestinoEntity = await queryRunner.manager.findOne(Almacen, { where: { id: almacenDestino } });
-
-      if (!almacenOrigenEntity) throw new NotFoundException(`El almacén origen con ID ${almacenOrigen} no existe`);
-      if (!almacenDestinoEntity) throw new NotFoundException(`El almacén destino con ID ${almacenDestino} no existe`);
-
-      // 3. Revertir stocks de los detalles anteriores
+      // 2️⃣ Revertir los stocks originales
       for (const detalle of traspasoExistente.detalles) {
+        const inv = await queryRunner.manager.findOne(Inventario, { where: { id: detalle.inventario.id }, relations: ['product'] });
+        if (!inv) continue;
 
-        const inventario = await queryRunner.manager.findOne(Inventario, {
-          where: { id: detalle.inventario.id },
-          relations: ['product'],
-        });
-        if (!inventario) continue;
-
-        // Revertir stock
+        // Revertir en origen
         await this.inventarioService.agregarStockTransaccional({
           almacenId: traspasoExistente.almacenOrigen.id,
           cantidad: detalle.cantidad,
-          sku: inventario.sku,
-          productoId: inventario.product.id,
-          fechaExpiracion: inventario.fechaExpiracion,
+          productoId: inv.product.id,
+          sku: inv.sku,
+          costoUnit: detalle.costoUnit,
+          fechaExpiracion: inv.fechaExpiracion,
         }, queryRunner);
 
+        // Revertir en destino
         await this.inventarioService.descontarStockTransaccional({
           almacenId: traspasoExistente.almacenDestino.id,
           cantidad: detalle.cantidad,
-          sku: inventario.sku,
-          productoId: inventario.product.id,
+          productoId: inv.product.id,
+          sku: inv.sku,
+          costoUnit: detalle.costoUnit,
         }, queryRunner);
 
-        // Registrar movimientos de reversión
+        // Movimientos de reversión
         await this.movimientosService.registrarIngresoTransaccional({
           almacenId: traspasoExistente.almacenOrigen.id,
           cantidad: detalle.cantidad,
-          sku: inventario.sku,
-          productoId: inventario.product.id,
-          descripcion: 'Reversión por edición de traspaso'
+          productoId: inv.product.id,
+          sku: inv.sku,
+          descripcion: 'Reversión por edición de traspaso',
+          costoUnit: detalle.costoUnit,
         }, queryRunner);
 
         await this.movimientosService.registrarSalidaTransaccional({
           almacenId: traspasoExistente.almacenDestino.id,
           cantidad: detalle.cantidad,
-          sku: inventario.sku,
-          productoId: inventario.product.id,
-          descripcion: 'Reversión por edición de traspaso'
+          productoId: inv.product.id,
+          sku: inv.sku,
+          descripcion: 'Reversión por edición de traspaso',
+          costoUnit: detalle.costoUnit,
         }, queryRunner);
       }
 
-      // 4. Actualizar datos principales
-      traspasoExistente.almacenOrigen = almacenOrigenEntity;
-      traspasoExistente.almacenDestino = almacenDestinoEntity;
+      // 3️⃣ Actualizar cabecera
+      traspasoExistente.almacenOrigen = { id: almacenOrigen } as any;
+      traspasoExistente.almacenDestino = { id: almacenDestino } as any;
       traspasoExistente.fecha = fecha;
       traspasoExistente.glosa = glosa;
-
       await queryRunner.manager.save(Traspaso, traspasoExistente);
 
-      // 5. Eliminar detalles antiguos
+      // 4️⃣ Eliminar detalles antiguos
       await queryRunner.manager.delete(DetalleTraspaso, { traspaso: { id } });
 
-      // 6. Crear los detalles nuevos
+      // 5️⃣ Procesar detalles nuevos
       for (const element of detalles) {
-
-        const inventario = await queryRunner.manager.findOne(Inventario, {
-          where: { id: element.id_inventario },
-          relations: ['product'],
-        });
-
-        if (!inventario) {
-          throw new NotFoundException(`El inventario con ID ${element.id_inventario} no existe`);
-        }
+        const inv = await queryRunner.manager.findOne(Inventario, { where: { id: element.id_inventario }, relations: ['product'] });
+        if (!inv) throw new NotFoundException(`Inventario con ID ${element.id_inventario} no existe`);
 
         const cantidad = Number(element.cantidad);
+        const costoUnitOrigen = inv.costoUnit;
 
         // Descontar del nuevo origen
         await this.inventarioService.descontarStockTransaccional({
-          almacenId: almacenOrigenEntity.id,
+          almacenId: almacenOrigen,
           cantidad,
-          sku: inventario.sku,
-          productoId: inventario.product.id,
+          productoId: inv.product.id,
+          sku: inv.sku,
+          costoUnit: costoUnitOrigen,
         }, queryRunner);
 
-        // Agregar al nuevo destino
+        // Agregar al nuevo destino y recalcular PPP si ya hay stock
+        let invDestino = await queryRunner.manager.findOne(Inventario, { where: { almacen: { id: almacenDestino }, product: { id: inv.product.id } } });
+        let costoUnitDestino = costoUnitOrigen;
+
+        if (invDestino && invDestino.stock > 0) {
+          costoUnitDestino = (
+            invDestino.stock * invDestino.costoUnit +
+            cantidad * costoUnitOrigen
+          ) / (invDestino.stock + cantidad);
+        }
+
         await this.inventarioService.agregarStockTransaccional({
-          almacenId: almacenDestinoEntity.id,
+          almacenId: almacenDestino,
           cantidad,
-          sku: inventario.sku,
-          productoId: inventario.product.id,
-          fechaExpiracion: inventario.fechaExpiracion,
+          productoId: inv.product.id,
+          sku: inv.sku,
+          costoUnit: Number(costoUnitDestino.toFixed(4)),
+          fechaExpiracion: inv.fechaExpiracion,
         }, queryRunner);
 
-        // Movimientos
+        // Registrar movimientos
         await this.movimientosService.registrarSalidaTransaccional({
-          almacenId: almacenOrigenEntity.id,
+          almacenId: almacenOrigen,
           cantidad,
-          sku: inventario.sku,
-          productoId: inventario.product.id,
-          descripcion: `Traspaso actualizado`
+          productoId: inv.product.id,
+          sku: inv.sku,
+          descripcion: 'Traspaso actualizado',
+          costoUnit: costoUnitOrigen,
         }, queryRunner);
 
         await this.movimientosService.registrarIngresoTransaccional({
-          almacenId: almacenDestinoEntity.id,
+          almacenId: almacenDestino,
           cantidad,
-          sku: inventario.sku,
-          productoId: inventario.product.id,
-          descripcion: `Traspaso actualizado`
+          productoId: inv.product.id,
+          sku: inv.sku,
+          descripcion: 'Traspaso actualizado',
+          costoUnit: Number(costoUnitDestino.toFixed(4)),
         }, queryRunner);
 
-        // Crear nuevo detalle
+        // Guardar detalle
         const detalleTraspaso = queryRunner.manager.create(DetalleTraspaso, {
-          ...element,
-          inventario: { id: inventario.id },
+          cantidad,
+          inventario: { id: inv.id },
           traspaso: { id: traspasoExistente.id },
         });
-
         await queryRunner.manager.save(DetalleTraspaso, detalleTraspaso);
       }
 
@@ -278,14 +302,11 @@ export class TraspasosService {
 
     } catch (error) {
       await queryRunner.rollbackTransaction();
-
-      if (error instanceof NotFoundException) throw error;
       throw new InternalServerErrorException(`No se pudo actualizar el traspaso: ${error.message}`);
     } finally {
       await queryRunner.release();
     }
   }
-
 
   async remove(id: string): Promise<void> {
     const queryRunner = this.dataSource.createQueryRunner();
@@ -312,6 +333,7 @@ export class TraspasosService {
             sku: inventario.sku,
             productoId: inventario.product.id,
             fechaExpiracion: inventario.fechaExpiracion,
+            costoUnit: inventario.costoUnit
           }, queryRunner);
           //registrar movimiento ingreso
           await this.movimientosService.registrarIngresoTransaccional({
@@ -319,7 +341,9 @@ export class TraspasosService {
             cantidad: detalle.cantidad,
             sku: inventario.sku,
             productoId: inventario.product.id,
-            descripcion: 'Traslado Eliminado'
+            descripcion: 'Traslado Eliminado',
+            costoUnit: inventario.costoUnit
+
           }, queryRunner)
 
           await this.inventarioService.descontarStockTransaccional({
@@ -327,6 +351,7 @@ export class TraspasosService {
             cantidad: detalle.cantidad,
             sku: inventario.sku,
             productoId: inventario.product.id,
+            costoUnit: inventario.costoUnit
           }, queryRunner);
           //registrar movimiento salida
           await this.movimientosService.registrarSalidaTransaccional({
@@ -334,7 +359,8 @@ export class TraspasosService {
             cantidad: detalle.cantidad,
             sku: inventario.sku,
             productoId: inventario.product.id,
-            descripcion: 'Traslado Eliminado'
+            descripcion: 'Traslado Eliminado',
+            costoUnit: inventario.costoUnit
           }, queryRunner)
         }
       }

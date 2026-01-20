@@ -18,4 +18,6 @@ export class CreateInventarioDto {
   @IsDateString()
   fechaExpiracion?: Date;
 
+  @IsNumber()
+  costoUnit: number;
 }

@@ -21,6 +21,7 @@ import { NotificacionesModule } from './notificaciones/notificaciones.module';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { TraspasosModule } from './despachos/despachos.module';
 import { ControlModule } from './control/control.module';
+import { ComprasModule } from './compras/compras.module';
 
 @Module({
   imports: [
@@ -59,7 +60,8 @@ import { ControlModule } from './control/control.module';
     NotificacionesModule,
     EventEmitterModule.forRoot(),
     TraspasosModule,
-    ControlModule
+    ControlModule,
+    ComprasModule
   ],
 })
 export class AppModule { }

@@ -8,12 +8,13 @@ import { CategoriasModule } from 'src/categorias/categorias.module';
 import { CloudinaryModule } from 'src/cloudinary/cloudinary.module';
 import { InventarioModule } from 'src/inventario/inventario.module';
 import { AlmacenesModule } from 'src/almacenes/almacenes.module';
+import { HistorialPrecio } from './entities/registros-cambio-precio.entity';
 
 @Module({
   controllers: [ProductosController],
   providers: [ProductosService],
   imports: [
-    TypeOrmModule.forFeature([Producto]),
+    TypeOrmModule.forFeature([Producto, HistorialPrecio]),
     CategoriasModule,
     CloudinaryModule,
     forwardRef(() => AlmacenesModule),

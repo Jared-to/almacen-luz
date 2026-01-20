@@ -8,11 +8,6 @@ import {
   Body,
   UseInterceptors,
   UploadedFile,
-  BadRequestException,
-  UploadedFiles,
-  ParseFilePipe,
-  MaxFileSizeValidator,
-  FileTypeValidator,
 } from '@nestjs/common';
 import { ProductosService } from './productos.service';
 import { CreateProductoDto } from './dto/create-producto.dto';
@@ -84,6 +79,16 @@ export class ProductosController {
   @Patch('estado/:id')
   async desactivarProducto(@Param('id') id: string) {
     await this.productosService.estadoProducto(id);
+    return {
+      message: 'Producto desactivado con éxito',
+    };
+  }
+
+  // cambiar precio del producto
+  @Patch('cambiar-precios/:id')
+  async cambiarPrecioProducto(@Param('id') id: string, @Body() body: { precioNuevo: number, precioMin: number }) {
+    const { precioMin, precioNuevo } = body;
+    await this.productosService.cambiarPrecioProducto(id, precioNuevo, precioMin);
     return {
       message: 'Producto desactivado con éxito',
     };

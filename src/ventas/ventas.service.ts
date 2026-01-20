@@ -235,7 +235,7 @@ export class VentasService {
       // Actualizar campos de la venta (se actualiza el almacen al nuevo)
       Object.assign(venta, {
         total: ventaData.total,
-        montoRecibido: ventaData?.montoRecibido||null,
+        montoRecibido: ventaData?.montoRecibido || null,
         subtotal: ventaData.subtotal,
         descuento: ventaData.descuento,
         tipo_pago: ventaData.tipo_pago,
@@ -622,43 +622,40 @@ export class VentasService {
     return { pData, xLabels };
   }
   private async registrarMovimiento(detalle: DetalleVenta, id_product: string, tipo: string, descripcion: string, almacen: string, sku: string, queryRunner: QueryRunner): Promise<void> {
-
+    const inventario = await this.inventarioService.obtenerProductoPorAlmacenYProducto(almacen, id_product);
 
     if (tipo === 'venta') {
       await this.inventarioService.descontarStockTransaccional({
         almacenId: almacen,
         cantidad: detalle.cantidad,
         productoId: id_product,
-        sku
+        sku,
+        costoUnit: inventario.costoUnit,
       }, queryRunner);
       await this.movimientosService.registrarSalidaTransaccional({
         almacenId: almacen,
         cantidad: detalle.cantidad,
         productoId: id_product,
         descripcion: descripcion,
-        sku
+        sku,
+        costoUnit: inventario.costoUnit,
       }, queryRunner);
     } else {
       await this.inventarioService.agregarStockTransaccional({
         almacenId: almacen,
         cantidad: detalle.cantidad,
         productoId: id_product,
-        sku
+        sku,
+        costoUnit: inventario.costoUnit,
       }, queryRunner);
       await this.movimientosService.registrarIngresoTransaccional({
         almacenId: almacen,
         cantidad: detalle.cantidad,
         productoId: id_product,
         descripcion: descripcion,
-        sku
+        sku,
+        costoUnit: inventario.costoUnit,
       }, queryRunner);
     }
   }
-}
-function formatDateToYMD(date: string | Date): string {
-  const d = new Date(date);
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, '0'); // meses inician en 0
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
 }

@@ -27,10 +27,16 @@ export class MovimientoInventario {
   tipo: string;
 
   @Column('text')
-  sku:string
+  sku: string
 
   @Column('float')
   cantidad: number;
+
+  @Column('float', { nullable: true })
+  costoUnit: number;
+
+  @Column('float', { nullable: true })
+  existencia: number;
 
   @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP', nullable: true })
   fecha: Date;

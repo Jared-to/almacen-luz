@@ -1,5 +1,6 @@
 import { CreateAlmacenDto } from "src/almacenes/dto/create-almacen.dto";
 import { CreateUserDto } from "src/auth/dto";
+import { CreateControlDto } from "src/control/dto/create-control.dto";
 
 
 export const createUserSeed: CreateUserDto = {
@@ -14,4 +15,9 @@ export const createAlmacen: CreateAlmacenDto = {
   nombre: 'Central',
   encargado: 'Administrador',
   ubicacion: 'Central'
+};
+
+export const control:CreateControlDto = {
+  titleMensaje: 'Sistema caido',
+  descripcionMensaje:'desactivado'
 };

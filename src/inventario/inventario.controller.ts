@@ -56,7 +56,7 @@ export class InventarioController {
   async obtenerStocksBajos() {
     return this.inventarioService.obtenerStocksBajos();
   }
-   @Get('prox-a-vencer')
+  @Get('prox-a-vencer')
   @Auth(ValidRoles.admin)
   async obtenerProductosAVencer() {
     return this.inventarioService.obtenerProductosAVencer();

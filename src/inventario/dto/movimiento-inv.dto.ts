@@ -17,6 +17,9 @@ export class MovimientoInventarioDto {
   descripcion?: string;
 
   @IsString()
-  sku: string
+  sku: string;
+
+  @IsNumber()
+  costoUnit: number;
 
 }

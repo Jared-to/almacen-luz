@@ -15,6 +15,7 @@ import { ProductosService } from 'src/productos/productos.service';
 import * as ExcelJS from 'exceljs';
 import { Venta } from 'src/ventas/entities/venta.entity';
 import { Gasto } from 'src/gastos/entities/gasto.entity';
+import { InventarioService } from 'src/inventario/inventario.service';
 
 @Injectable()
 export class ExcelService {
@@ -32,6 +33,9 @@ export class ExcelService {
     private readonly almacenRepository: Repository<Almacen>,
 
     private readonly movimientosService: MovimientosAlmacenService,
+
+    private readonly inventarioService: InventarioService,
+
 
     private readonly connection: DataSource,
   ) { }
@@ -88,6 +92,8 @@ export class ExcelService {
           const unidadMedida = row['unidad_medida'];
           const sku = (row['Codigo_barras']);
           const precioVenta = Number(row['Precio']);
+          const precioVentaMin = Number(row['Precio Min Venta']);
+          const precioCompra = Number(row['Precio Compra']);
           const almacenNombre = (row['Almacen']).toLowerCase().trim();
           const rawFecha = (row['Fecha Expiracion']);
 
@@ -135,7 +141,9 @@ export class ExcelService {
               stock: cantidad.toFixed(2),
               sku: String(sku),
               almacen: almacen.id,
-              fechaExpiracion
+              fechaExpiracion,
+              precio_compra: precioCompra.toFixed(2),
+              precio_min_venta: precioVentaMin.toFixed(2),
             }, queryRunner);
             console.log(producto);
             productosMap.set(nombre, producto);
@@ -637,18 +645,13 @@ export class ExcelService {
     return filePath;
   }
 
-  async generarReporteMovimientosProducto(fechaInicio: string, fechaFn: string, id_producto: string) {
+  async generarReporteMovimientosProducto(fechaInicio: string, fechaFn: string, id_inventario: string) {
     const fechaHoy = new Date().toISOString().split('T')[0];
 
-    // Obtener datos del producto
-    const producto = await this.productoRepository.findOne({ where: { id: id_producto } });
-
-    if (!producto) {
-      throw new NotFoundException('El producto no fue encontrado.');
-    }
+    const inv=await this.inventarioService.obtenerInfoProducto(id_inventario);
 
     // Obtener movimientos desde el servicio
-    const movimientos = await this.movimientosService.obtenerMovimientosPorProducto(id_producto, fechaInicio, fechaFn);
+    const movimientos = await this.movimientosService.obtenerMovimientosPorProducto(id_inventario, fechaInicio, fechaFn);
 
     // Crear workbook y hoja
     const workbook = new ExcelJS.Workbook();
@@ -664,7 +667,7 @@ export class ExcelService {
     };
 
     worksheet.mergeCells('A2', 'F2');
-    worksheet.getCell('A2').value = `Producto: ${producto?.nombre || 'Desconocido'}`;
+    worksheet.getCell('A2').value = `Producto: ${inv.product?.nombre || 'Desconocido'}`;
     worksheet.getCell('A2').style = {
       font: { bold: true, size: 12 },
       alignment: { horizontal: 'left', vertical: 'middle' },
@@ -708,7 +711,7 @@ export class ExcelService {
         mov.descripcion || '',
         mov.almacen?.nombre || 'Central',
         mov.cantidad,
-        mov.tipo
+        mov.tipo,
       ]);
 
       const isIngreso = mov.tipo.toLowerCase() === 'ingreso';
@@ -754,7 +757,8 @@ export class ExcelService {
       { width: 40 },   // Referencia
       { width: 25 },   // Almacén
       { width: 10 },   // Cantidad
-      { width: 12 }    // Tipo
+      { width: 12 },    // Tipo
+      { width: 12 }    // precio compra
     ];
 
     // Guardar archivo

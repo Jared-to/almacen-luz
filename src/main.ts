@@ -12,7 +12,7 @@ async function bootstrap() {
     prefix: '/uploads', // Prefijo para las URLs
   });
 
-  app.setGlobalPrefix('almacen-candelaria/api');
+  app.setGlobalPrefix('almacen-luz/api');
 
   app.useGlobalPipes(
     new ValidationPipe({

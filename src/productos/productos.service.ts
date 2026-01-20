@@ -9,6 +9,7 @@ import { CloudinaryService } from 'src/cloudinary/cloudinary.service';
 import { InventarioService } from 'src/inventario/inventario.service';
 import { AlmacenesService } from 'src/almacenes/almacenes.service';
 import { MovimientosAlmacenService } from 'src/inventario/service/movimientos-almacen.service';
+import { HistorialPrecio } from './entities/registros-cambio-precio.entity';
 
 @Injectable()
 export class ProductosService {
@@ -18,6 +19,9 @@ export class ProductosService {
 
     @InjectRepository(Categoria)
     private readonly categoriaRepository: Repository<Categoria>,
+
+    @InjectRepository(HistorialPrecio)
+    private readonly historialRepository: Repository<HistorialPrecio>,
 
     private readonly cloudinaryService: CloudinaryService,
 
@@ -29,7 +33,7 @@ export class ProductosService {
 
   // Crear un producto
   async createProducto(createProductoDto: CreateProductoDto, file?: Express.Multer.File): Promise<Producto> {
-    const { categoriaId, stock, marca, almacen, sku, fechaExpiracion, ...productoData } = createProductoDto;
+    const { categoriaId, stock, marca, almacen, sku, fechaExpiracion, precio_compra, precio_min_venta, precio_venta, ...productoData } = createProductoDto;
 
     let imagesUrl
     try {
@@ -50,7 +54,9 @@ export class ProductosService {
         imagen: imagesUrl || null,
         categoria,
         marca: marca,
-        precio_venta: parseFloat(productoData.precio_venta),
+        precioVenta: Number(precio_venta),
+        precioVentaMin: Number(precio_min_venta),
+        precioCompraIn: Number(precio_compra)
       });
       const productoGuardado = await this.productoRepository.save(producto);
 
@@ -60,13 +66,14 @@ export class ProductosService {
       // Guardar nuevamente el producto con el código generado
       const productoG = await this.productoRepository.save(productoGuardado);
 
-      //!almacen
+      //!ingreso al stock
       await this.inventarioService.agregarStock({
         sku,
         almacenId: almacen,//Tomar el unico almacen,
         cantidad: parseFloat(stock),
         productoId: productoG.id,
-        fechaExpiracion
+        fechaExpiracion,
+        costoUnit: Number(precio_compra)
       })
       await this.movimientoInventario.registrarIngreso({
         sku: sku,
@@ -74,6 +81,8 @@ export class ProductosService {
         cantidad: parseFloat(stock),
         productoId: productoG.id,
         descripcion: 'Producto Creado',
+        costoUnit: Number(precio_compra)
+
       })
 
       return productoG;
@@ -84,7 +93,7 @@ export class ProductosService {
   }
 
   async createProductoExcel(createProductoDto: CreateProductoDto, queryRunner: QueryRunner): Promise<Producto> {
-    const { categoriaId, almacen, sku, fechaExpiracion, ...productoData } = createProductoDto;
+    const { categoriaId, almacen, sku, fechaExpiracion, precio_compra, precio_min_venta, precio_venta, ...productoData } = createProductoDto;
 
     let imagesUrl;
     try {
@@ -109,7 +118,9 @@ export class ProductosService {
           ...productoData,
           imagen: imagesUrl || null,
           categoria,
-          precio_venta: parseFloat(productoData.precio_venta),
+          precioVenta: Number(precio_venta),
+          precioVentaMin: Number(precio_min_venta),
+          precioCompraIn: Number(precio_compra)
         });
 
       // Guardar el producto usando el QueryRunner si está presente
@@ -133,14 +144,16 @@ export class ProductosService {
         sku,
         cantidad: parseFloat(createProductoDto.stock),
         productoId: productoG.id,
-        fechaExpiracion
+        fechaExpiracion,
+        costoUnit: Number(precio_compra),
       }, queryRunner)
       await this.movimientoInventario.registrarIngresoTransaccional({
         almacenId: almacen,
         sku,
         cantidad: parseFloat(createProductoDto.stock),
         productoId: productoG.id,
-        descripcion: 'Producto Creado',
+        descripcion: 'Producto Creado por Excel',
+        costoUnit: Number(precio_compra),
       }, queryRunner)
 
       return productoG;
@@ -150,7 +163,51 @@ export class ProductosService {
     }
   }
 
+  async cambiarPrecioProducto(id_producto: string, precioNuevo: number, precioMinVenta: number,) {
 
+
+    const producto = await this.productoRepository.findOne({ where: { id: id_producto } });
+
+    if (!producto) {
+      throw new NotFoundException('No se encontro el producto');
+    }
+    const historial = this.historialRepository.create({
+      product: { id: id_producto },
+      precioVentaAnt: producto.precioVenta ?? 0,
+      precioVentaNuevo: precioNuevo,
+    });
+    await this.historialRepository.save(historial)
+
+    //Cambiar precios del producto 
+    producto.precioVenta = precioNuevo;
+    producto.precioVentaMin = precioMinVenta;
+
+    await this.productoRepository.save(producto);
+
+  }
+
+  async cambiarPrecioProductoTransaccion(id_producto: string, precioNuevo: number, precioMinVenta: number, queryRunner: QueryRunner) {
+
+
+    const producto = await queryRunner.manager.findOne(Producto, { where: { id: id_producto } });
+
+    if (!producto) {
+      throw new NotFoundException('No se encontro el producto');
+    }
+    const historial = queryRunner.manager.create(HistorialPrecio, {
+      product: { id: id_producto },
+      precioVentaAnt: producto.precioVenta ?? 0,
+      precioVentaNuevo: precioNuevo,
+    });
+    await queryRunner.manager.save(historial)
+
+    //Cambiar precios del producto 
+    producto.precioVenta = precioNuevo;
+    producto.precioVentaMin = precioMinVenta;
+
+    await queryRunner.manager.save(producto);
+
+  }
   // Traer un producto por su ID
   async findOneProducto(id: string): Promise<Producto> {
     const producto = await this.productoRepository
@@ -160,7 +217,6 @@ export class ProductosService {
         'producto.id',
         'producto.codigo',
         'producto.nombre',
-        'producto.precio_venta',
         'producto.imagen',
         'producto.marca',
         'producto.unidad_medida',
@@ -182,7 +238,7 @@ export class ProductosService {
     updateProductoDto: UpdateProductoDto,
     file?: Express.Multer.File
   ): Promise<Producto> {
-    const { categoriaId, ...productoData } = updateProductoDto;
+    const { categoriaId, almacen, precio_compra, precio_min_venta, precio_venta, ...productoData } = updateProductoDto;
 
     // Verificar si el producto existe
     let producto = await this.productoRepository.findOne({ where: { id } });
@@ -213,16 +269,28 @@ export class ProductosService {
     }
 
     // Actualizar los datos del producto
-    producto = {
+    const productoUpdate = {
       ...producto,
       ...productoData,
       imagen: finalImage || producto.imagen, // Mantener la imagen previa si no se envía una nueva
       categoria,
-      precio_venta: parseFloat(productoData.precio_venta),
+      precioCompraIn: Number(precio_compra),
+      precio_min_venta: Number(precio_min_venta),
+      precio_venta: Number(precio_venta)
     };
 
+    if (Number(precio_venta) !== producto.precioVenta) {
+      const historial = this.historialRepository.create({
+        product: { id: producto.id },
+        precioVentaAnt: producto.precioVenta,
+        precioVentaNuevo: Number(precio_venta),
+      });
+      await this.historialRepository.save(historial)
+    }
+
+
     try {
-      return await this.productoRepository.save(producto);
+      return await this.productoRepository.save(productoUpdate);
     } catch (error) {
       throw new Error(`Error al actualizar el producto: ${error.message}`);
     }
