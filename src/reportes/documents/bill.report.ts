@@ -83,7 +83,7 @@ export const billReport = (venta: Venta): TDocumentDefinitions => {
       {
         columns: [
           {
-            text: 'Reporte de Venta',
+            text: 'ALMACEN LUZ',
             style: 'header',
             alignment: 'center',
           },

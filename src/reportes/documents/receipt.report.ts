@@ -103,10 +103,10 @@ export const receiptReport = (venta: Venta): TDocumentDefinitions => {
 
   return {
     defaultStyle: { fontSize: 8, margin: [0, 2] },
-    pageSize: { width: 250, height: 210 },
+    pageSize: { width: 250, height: 'auto' },
     pageMargins: [10, 10, 10, 10],
     content: [
-      ...receiptContent('RECIBO'),
+      ...receiptContent('ALMACEN LUZ'),
     ] as Content[],
     styles: styles,
   };

@@ -125,7 +125,7 @@ export class VentasService {
 💰 Total: *${venta.total.toFixed(2)} Bs*  
 🆔 Código: *${venta.codigo}*  
 📅 Fecha: *${new Date(venta.fecha).toLocaleString()}*
-
+Revisa en *https://almacen-luz.comercio.bo*
 ✅ Revisa los detalles en tu panel.`;
 
       // Emitir evento asíncrono SIN bloquear la respuesta

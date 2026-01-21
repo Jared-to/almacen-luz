@@ -90,7 +90,7 @@ export class GastosService {
 💰 Metodo de Pago: *${gasto.tipo_pago}*  
 🆔 Código: *${gasto.codigo}*  
 📅 Fecha: *${new Date(gasto.fecha).toLocaleString()}*
-
+Revisalo en *https://almacen-luz.comercio.bo*
 ✅ Revisa los detalles en tu panel de ventas.`;
 
 
