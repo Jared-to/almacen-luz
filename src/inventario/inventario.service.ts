@@ -16,10 +16,6 @@ export class InventarioService {
   constructor(
     @InjectRepository(Inventario)
     private readonly inventarioRepository: Repository<Inventario>,
-    @InjectRepository(inventarioInicial)
-    private readonly inventarioInicialRepository: Repository<inventarioInicial>,
-
-    private readonly movimientosService: MovimientosAlmacenService,
     @Inject(forwardRef(() => ProductosService))
     private readonly productosService: ProductosService,
     private readonly AlmacenService: AlmacenesService
@@ -29,7 +25,8 @@ export class InventarioService {
   async find(): Promise<Inventario[]> {
     // Obtener productos relacionados al almacén
     return await this.inventarioRepository.find({
-      relations: ['product', 'product.categoria']
+      relations: ['product', 'product.categoria', 'almacen'],
+      order: { createDate: 'ASC' }
     })
   }
 
@@ -235,6 +232,8 @@ export class InventarioService {
         'almacen.nombre AS almacen_nombre',
         'almacen.ubicacion AS almacen_ubicacion'
       ])
+      .where('producto.is_delete = :is_delete', { is_delete: false })
+      .orderBy('inventario.createDate', 'ASC')
       .getRawMany();
 
     return inventario;
@@ -285,7 +284,7 @@ export class InventarioService {
         'producto.unidad_medida AS unidad_medida',
         'producto.marca AS marca',
         'producto.precioVenta AS precio_venta',
-        'producto.precioVentaMin AS precio_venta',
+        'producto.precioVentaMin AS precio_venta_min',
         'producto.imagen AS imagen',
         'producto.codigo AS codigo',
         'producto.estado AS estado',
@@ -293,9 +292,11 @@ export class InventarioService {
         'categoria.id AS categoriaID',
         'almacen.id AS almacen_id',
         'almacen.nombre AS almacen_nombre',
+        'inventario.costoUnit AS costoUnit',
       ])
       .where('producto.estado = true')
       .andWhere('inventario.stock > 0')
+      .andWhere('producto.is_delete = :is_delete', { is_delete: false })
       .andWhere('almacen.id = :id_almacen', { id_almacen }) // 👈 filtro por almacén
       .getRawMany();
 
@@ -331,8 +332,10 @@ export class InventarioService {
         'almacen.id AS almacen_id',
         'inventario.stock AS stock',
         'inventario.id AS id_inventario',
+        'inventario.costoUnit AS costoUnit',
       ])
       .where('producto.estado = true')
+      .andWhere('producto.is_delete = :is_delete', { is_delete: false })
       .andWhere('almacen.id = :almacenId', { almacenId })
       .getRawMany();
 
@@ -406,7 +409,7 @@ export class InventarioService {
 
   async obtenerStocksBajos(): Promise<Inventario[]> {
     const inventario = await this.inventarioRepository.find({
-      where: { stock: Between(1, 9), }, //stock<10 
+      where: { stock: Between(1, 9), product: { is_delete: false } }, //stock<10 
       order: { stock: 'ASC' },
       relations: ['product', 'almacen'],
     });
@@ -425,6 +428,7 @@ export class InventarioService {
     return await this.inventarioRepository.find({
       where: {
         fechaExpiracion: Between(hoy, fechaLimite),
+        product: { is_delete: false }
       },
       order: { fechaExpiracion: 'ASC' },
       relations: ['product', 'almacen'],

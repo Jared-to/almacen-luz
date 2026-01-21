@@ -34,7 +34,12 @@ export class CategoriasService {
 
   // Traer todas las categorías
   async findAllCategorias(): Promise<Categoria[]> {
-    return await this.categoriaRepository.find({ relations: ['productos'] }); // Incluye los productos
+    return await this.categoriaRepository.find(
+      {
+        relations: ['productos'],
+        order: { createDate: 'ASC' }
+      }
+    );
   }
 
   // Traer una categoría específica

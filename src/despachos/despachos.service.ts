@@ -57,7 +57,8 @@ export class TraspasosService {
         // -----------------------------
         // Descontar del almacén origen
         // -----------------------------
-        await this.inventarioService.descontarStockTransaccional({
+
+        const inventario = await this.inventarioService.descontarStockTransaccional({
           almacenId: almaceOrigen.id,
           cantidad,
           productoId: inventarioOrigen.product.id,
@@ -72,6 +73,7 @@ export class TraspasosService {
           descripcion: `Traslado a ${almaceDestino.nombre}`,
           sku: inventarioOrigen.sku,
           costoUnit: costoUnitOrigen,
+          inventario
         }, queryRunner);
 
         // -----------------------------
@@ -91,7 +93,7 @@ export class TraspasosService {
           ) / (inventarioDestino.stock + cantidad);
         }
 
-        await this.inventarioService.agregarStockTransaccional({
+        const inventarioI = await this.inventarioService.agregarStockTransaccional({
           almacenId: almaceDestino.id,
           cantidad,
           productoId: inventarioOrigen.product.id,
@@ -106,6 +108,7 @@ export class TraspasosService {
           descripcion: `Traslado desde ${almaceOrigen.nombre}`,
           sku: inventarioOrigen.sku,
           costoUnit: Number(costoUnitDestino.toFixed(4)),
+          inventario: inventarioI
         }, queryRunner);
 
         // -----------------------------
@@ -184,7 +187,8 @@ export class TraspasosService {
         if (!inv) continue;
 
         // Revertir en origen
-        await this.inventarioService.agregarStockTransaccional({
+
+        const inventarioI = await this.inventarioService.agregarStockTransaccional({
           almacenId: traspasoExistente.almacenOrigen.id,
           cantidad: detalle.cantidad,
           productoId: inv.product.id,
@@ -194,7 +198,7 @@ export class TraspasosService {
         }, queryRunner);
 
         // Revertir en destino
-        await this.inventarioService.descontarStockTransaccional({
+        const inventarioS = await this.inventarioService.descontarStockTransaccional({
           almacenId: traspasoExistente.almacenDestino.id,
           cantidad: detalle.cantidad,
           productoId: inv.product.id,
@@ -210,6 +214,7 @@ export class TraspasosService {
           sku: inv.sku,
           descripcion: 'Reversión por edición de traspaso',
           costoUnit: detalle.costoUnit,
+          inventario: inventarioI
         }, queryRunner);
 
         await this.movimientosService.registrarSalidaTransaccional({
@@ -219,6 +224,7 @@ export class TraspasosService {
           sku: inv.sku,
           descripcion: 'Reversión por edición de traspaso',
           costoUnit: detalle.costoUnit,
+          inventario: inventarioS
         }, queryRunner);
       }
 
@@ -241,7 +247,7 @@ export class TraspasosService {
         const costoUnitOrigen = inv.costoUnit;
 
         // Descontar del nuevo origen
-        await this.inventarioService.descontarStockTransaccional({
+        const inventarioS = await this.inventarioService.descontarStockTransaccional({
           almacenId: almacenOrigen,
           cantidad,
           productoId: inv.product.id,
@@ -260,7 +266,7 @@ export class TraspasosService {
           ) / (invDestino.stock + cantidad);
         }
 
-        await this.inventarioService.agregarStockTransaccional({
+        const inventarioI = await this.inventarioService.agregarStockTransaccional({
           almacenId: almacenDestino,
           cantidad,
           productoId: inv.product.id,
@@ -277,6 +283,7 @@ export class TraspasosService {
           sku: inv.sku,
           descripcion: 'Traspaso actualizado',
           costoUnit: costoUnitOrigen,
+          inventario: inventarioS
         }, queryRunner);
 
         await this.movimientosService.registrarIngresoTransaccional({
@@ -286,6 +293,7 @@ export class TraspasosService {
           sku: inv.sku,
           descripcion: 'Traspaso actualizado',
           costoUnit: Number(costoUnitDestino.toFixed(4)),
+          inventario: inventarioI
         }, queryRunner);
 
         // Guardar detalle
@@ -327,7 +335,7 @@ export class TraspasosService {
         const inventario = detalle.inventario;
 
         if (inventario) {
-          await this.inventarioService.agregarStockTransaccional({
+          const inventarioI = await this.inventarioService.agregarStockTransaccional({
             almacenId: traspaso.almacenOrigen.id,
             cantidad: detalle.cantidad,
             sku: inventario.sku,
@@ -342,11 +350,11 @@ export class TraspasosService {
             sku: inventario.sku,
             productoId: inventario.product.id,
             descripcion: 'Traslado Eliminado',
-            costoUnit: inventario.costoUnit
-
+            costoUnit: inventario.costoUnit,
+            inventario: inventarioI
           }, queryRunner)
 
-          await this.inventarioService.descontarStockTransaccional({
+          const inventarioS = await this.inventarioService.descontarStockTransaccional({
             almacenId: traspaso.almacenDestino.id,
             cantidad: detalle.cantidad,
             sku: inventario.sku,
@@ -360,7 +368,8 @@ export class TraspasosService {
             sku: inventario.sku,
             productoId: inventario.product.id,
             descripcion: 'Traslado Eliminado',
-            costoUnit: inventario.costoUnit
+            costoUnit: inventario.costoUnit,
+            inventario: inventarioS
           }, queryRunner)
         }
       }

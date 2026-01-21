@@ -1,4 +1,5 @@
 import { IsNumber, IsOptional, IsPositive, IsString } from "class-validator";
+import { Inventario } from "../entities/inventario.entity";
 
 export class MovimientoInventarioDto {
 
@@ -21,5 +22,7 @@ export class MovimientoInventarioDto {
 
   @IsNumber()
   costoUnit: number;
+
+  inventario:Inventario
 
 }

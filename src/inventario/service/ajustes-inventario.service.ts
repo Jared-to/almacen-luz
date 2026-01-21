@@ -38,7 +38,7 @@ export class AjustesInventario {
     if (tipo === 'Aumento') {
 
       // Ingreso en inventario
-      await this.inventarioService.agregarStock({
+      const inventarioI = await this.inventarioService.agregarStock({
         almacenId: almacen,
         cantidad,
         productoId,
@@ -54,11 +54,12 @@ export class AjustesInventario {
         descripcion: glosa,
         sku,
         costoUnit: Number(costoUnit.toFixed(4)),
+        inventario: inventarioI
       });
 
     } else {
       // Salida de inventario → siempre se toma el PPP actual
-      await this.inventarioService.descontarStock({
+      const inventarioS = await this.inventarioService.descontarStock({
         almacenId: almacen,
         cantidad,
         productoId,
@@ -73,6 +74,7 @@ export class AjustesInventario {
         descripcion: glosa,
         sku,
         costoUnit: Number(costoUnit.toFixed(4)),
+        inventario: inventarioS
       });
     }
   }

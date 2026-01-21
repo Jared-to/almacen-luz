@@ -10,7 +10,7 @@ export class CategoriasGastosService {
   constructor(
     @InjectRepository(CategoriaGasto)
     private readonly categoriaGastoRepository: Repository<CategoriaGasto>,
-  ) {}
+  ) { }
 
   async create(createCategoriaGastoDto: CreateCategoriaGastoDto): Promise<CategoriaGasto> {
     const nuevaCategoria = this.categoriaGastoRepository.create(createCategoriaGastoDto);
@@ -18,7 +18,11 @@ export class CategoriasGastosService {
   }
 
   async findAll(): Promise<CategoriaGasto[]> {
-    return await this.categoriaGastoRepository.find({ relations: ['gastos'] });
+    return await this.categoriaGastoRepository.find(
+      {
+        relations: ['gastos'],
+        order: { createDate: 'ASC' }
+      });
   }
 
   async findOne(id: string): Promise<CategoriaGasto> {

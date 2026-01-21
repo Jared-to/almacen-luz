@@ -1,5 +1,5 @@
 import { Gasto } from "src/gastos/entities/gasto.entity";
-import { Column, Entity, OneToMany, PrimaryGeneratedColumn } from "typeorm";
+import { Column, CreateDateColumn, Entity, OneToMany, PrimaryGeneratedColumn } from "typeorm";
 
 
 @Entity('categorias_gastos')
@@ -16,4 +16,10 @@ export class CategoriaGasto {
 
   @OneToMany(() => Gasto, (gasto) => gasto.categoria)
   gastos: Gasto[];
+
+  @CreateDateColumn({
+    name: 'created_at',
+    type: 'timestamp',
+  })
+  createDate: Date;
 }

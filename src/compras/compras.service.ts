@@ -80,7 +80,7 @@ export class ComprasService {
 
 
         // 🔹 MOVIMIENTO DE INGRESO (con costo congelado)
-        await this.inventarioService.agregarStockTransaccional(
+        const inventarioI = await this.inventarioService.agregarStockTransaccional(
           {
             almacenId: almaceDestino.id,
             cantidad: cantidadCompra,
@@ -100,7 +100,8 @@ export class ComprasService {
             productoId: inventario.product.id,
             descripcion: 'Ingreso por compra',
             sku: inventario.sku,
-            costoUnit: nuevoCostoUnit
+            costoUnit: nuevoCostoUnit,
+            inventario: inventarioI
           },
           queryRunner,
         );
@@ -191,7 +192,7 @@ export class ComprasService {
         for (const detalle of compra.detalles) {
           const inv = detalle.inventario;
 
-          await this.inventarioService.descontarStockTransaccional(
+          const inventarioS = await this.inventarioService.descontarStockTransaccional(
             {
               almacenId: almacenAnteriorId,
               cantidad: Number(detalle.cantidad),
@@ -211,6 +212,7 @@ export class ComprasService {
               descripcion: 'Salida por cambio de almacén en compra',
               sku: inv.sku,
               costoUnit: inv.costoUnit,
+              inventario: inventarioS
             },
             queryRunner,
           );
@@ -224,7 +226,7 @@ export class ComprasService {
               ) / (inventarioLlegada.stock + detalle.cantidad);
           }
 
-          await this.inventarioService.agregarStockTransaccional(
+          const inventarioI = await this.inventarioService.agregarStockTransaccional(
             {
               almacenId: almacenNuevoId,
               cantidad: Number(detalle.cantidad),
@@ -243,7 +245,8 @@ export class ComprasService {
               productoId: inv.product.id,
               descripcion: 'Ingreso por cambio de almacén en compra',
               sku: inv.sku,
-              costoUnit
+              costoUnit,
+              inventario: inventarioI
             },
             queryRunner,
           );
@@ -335,7 +338,7 @@ export class ComprasService {
 
 
 
-            await this.inventarioService.agregarStockTransaccional(
+            const inventarioI = await this.inventarioService.agregarStockTransaccional(
               {
                 almacenId: compra.almacen.id,
                 cantidad: diferencia,
@@ -354,14 +357,15 @@ export class ComprasService {
                 productoId: inventario.product.id,
                 descripcion: 'Ajuste positivo por actualización de compra',
                 sku: inventario.sku,
-                costoUnit: Number(nuevoPPP.toFixed(4))
+                costoUnit: Number(nuevoPPP.toFixed(4)),
+                inventario: inventarioI
               },
               queryRunner,
             );
           }
 
           if (diferencia < 0) {
-            await this.inventarioService.descontarStockTransaccional(
+            const inventarioS = await this.inventarioService.descontarStockTransaccional(
               {
                 almacenId: compra.almacen.id,
                 cantidad: Math.abs(diferencia),
@@ -381,6 +385,7 @@ export class ComprasService {
                 descripcion: 'Ajuste negativo por actualización de compra',
                 sku: inventario.sku,
                 costoUnit: inventario.costoUnit,
+                inventario: inventarioS
               },
               queryRunner,
             );
@@ -426,7 +431,7 @@ export class ComprasService {
                 (cantidadCompra * precioCompra)
               ) / nuevoStock;
 
-          await this.inventarioService.agregarStockTransaccional(
+          const inventarioI = await this.inventarioService.agregarStockTransaccional(
             {
               almacenId: compra.almacen.id,
               cantidad: Number(item.cantidad),
@@ -447,6 +452,7 @@ export class ComprasService {
                 'Ingreso por nuevo detalle en actualización de compra',
               sku: inventario.sku,
               costoUnit: nuevoCostoUnit,
+              inventario: inventarioI
             },
             queryRunner,
           );
@@ -470,7 +476,7 @@ export class ComprasService {
       for (const detalleEliminado of detallesMap.values()) {
         const inv = detalleEliminado.inventario;
 
-        await this.inventarioService.descontarStockTransaccional(
+        const inventarioS = await this.inventarioService.descontarStockTransaccional(
           {
             almacenId: compra.almacen.id,
             cantidad: Number(detalleEliminado.cantidad),
@@ -491,6 +497,7 @@ export class ComprasService {
             descripcion: 'Salida por eliminación de detalle de compra',
             sku: inv.sku,
             costoUnit: inv.costoUnit,
+            inventario: inventarioS
           },
           queryRunner,
         );
@@ -533,7 +540,7 @@ export class ComprasService {
         const inv = detalle.inventario;
 
         // ➖ Salida de inventario (se devuelve lo ingresado por la compra)
-        await this.inventarioService.descontarStockTransaccional(
+      const inventarioS =   await this.inventarioService.descontarStockTransaccional(
           {
             almacenId: compra.almacen.id,
             cantidad: Number(detalle.cantidad),
@@ -554,6 +561,7 @@ export class ComprasService {
             descripcion: 'Salida por eliminación de compra',
             sku: inv.sku,
             costoUnit: inv.costoUnit,
+            inventario:inventarioS
           },
           queryRunner,
         );

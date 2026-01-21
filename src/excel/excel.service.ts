@@ -172,240 +172,206 @@ export class ExcelService {
   async generarReporteVentas(ventas: Venta[]) {
     const fechaHoy = new Date().toISOString().split('T')[0];
     const workbook = new ExcelJS.Workbook();
-    const worksheet = workbook.addWorksheet('Reporte Ventas');
 
-    const estiloTitulo = {
+    // 📘 Hoja 1: Resumen General
+    const hojaResumen = workbook.addWorksheet('Resumen Ventas');
+
+    // 📗 Hoja 2: Detalle de Ventas
+    const hojaDetalle = workbook.addWorksheet('Detalle Ventas');
+
+    // 🎨 Estilos
+    const estiloTitulo: Partial<ExcelJS.Style> = {
       font: { bold: true, size: 16, color: { argb: 'FFFFFFFF' } },
-      fill: {
-        type: 'pattern' as const,
-        pattern: 'solid' as const,
-        fgColor: { argb: '4F81BD' }
-      },
-      alignment: {
-        horizontal: 'center' as ExcelJS.Alignment['horizontal'],
-        vertical: 'middle' as ExcelJS.Alignment['vertical']
-      }
+      fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: '4F81BD' } },
+      alignment: { horizontal: 'center', vertical: 'middle' },
     };
 
-    const estiloTotal = {
-      font: { bold: true, size: 12 },
-      fill: {
-        type: 'pattern' as const,
-        pattern: 'solid' as const,
-        fgColor: { argb: 'C6EFCE' }
-      },
-      alignment: {
-        horizontal: 'center' as ExcelJS.Alignment['horizontal'],
-        vertical: 'middle' as ExcelJS.Alignment['vertical']
-      }
-    };
-
-    const estiloEncabezado = {
+    const estiloEncabezado: Partial<ExcelJS.Style> = {
       font: { bold: true, color: { argb: 'FFFFFFFF' } },
-      fill: {
-        type: 'pattern' as const,
-        pattern: 'solid' as const,
-        fgColor: { argb: '4F81BD' }
-      },
-      alignment: {
-        horizontal: 'center' as ExcelJS.Alignment['horizontal'],
-        vertical: 'middle' as ExcelJS.Alignment['vertical']
-      },
+      fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: '4F81BD' } },
+      alignment: { horizontal: 'center', vertical: 'middle' },
       border: {
-        top: { style: 'thin' as ExcelJS.BorderStyle },
-        bottom: { style: 'thin' as ExcelJS.BorderStyle },
-        left: { style: 'thin' as ExcelJS.BorderStyle },
-        right: { style: 'thin' as ExcelJS.BorderStyle }
-      }
+        top: { style: 'thin' },
+        bottom: { style: 'thin' },
+        left: { style: 'thin' },
+        right: { style: 'thin' },
+      },
     };
 
-    const estiloDato = {
+    const estiloDato: Partial<ExcelJS.Style> = {
       border: {
-        top: { style: 'thin' as ExcelJS.BorderStyle },
-        bottom: { style: 'thin' as ExcelJS.BorderStyle },
-        left: { style: 'thin' as ExcelJS.BorderStyle },
-        right: { style: 'thin' as ExcelJS.BorderStyle }
+        top: { style: 'thin' },
+        bottom: { style: 'thin' },
+        left: { style: 'thin' },
+        right: { style: 'thin' },
       },
-      alignment: {
-        vertical: 'middle' as ExcelJS.Alignment['vertical']
-      }
+      alignment: { vertical: 'middle' },
     };
-    const estiloAnulado = {
+
+    const estiloAnulado: Partial<ExcelJS.Style> = {
       ...estiloDato,
-      fill: {
-        type: 'pattern',
-        pattern: 'solid',
-        fgColor: { argb: 'F8D7DA' }, // Rojo claro
-      },
-      font: { color: { argb: 'A94442' } }, // Texto rojo oscuro
+      fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'F8D7DA' } },
+      font: { color: { argb: 'A94442' } },
     };
 
-    function aplicarEstilo(cell, estilo) {
-      Object.assign(cell, {
-        font: estilo.font,
-        alignment: estilo.alignment,
-        border: estilo.border,
-        fill: estilo.fill,
-      });
-    }
-    // Título
-    worksheet.mergeCells('A1:H1');
-    worksheet.getCell('A1').value = `REPORTE DE VENTAS - Fecha: ${fechaHoy}`;
-    worksheet.getCell('A1').style = estiloTitulo;
+    const estiloResumen: Partial<ExcelJS.Style> = {
+      font: { bold: true, size: 12 },
+      fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'C6EFCE' } },
+      alignment: { horizontal: 'center', vertical: 'middle' },
+    };
 
-    // Total de ventas
-    // Totales generales
-    const totalVentas = ventas
-      .filter(v => v.estado === true)
-      .reduce((sum, v) => sum + v.total, 0);
+    const aplicarEstilo = (cell: ExcelJS.Cell, estilo: Partial<ExcelJS.Style>) => {
+      if (estilo.font) cell.font = estilo.font;
+      if (estilo.alignment) cell.alignment = estilo.alignment;
+      if (estilo.border) cell.border = estilo.border;
+      if (estilo.fill) cell.fill = estilo.fill;
+    };
 
-    let totalQR = ventas
-      .filter(v => v.tipo_pago.toLowerCase() === 'qr' && v.estado === true)
-      .reduce((sum, v) => sum + v.total, 0);
-    let totalEfectivo = ventas
-      .filter(v => v.tipo_pago.toLowerCase() === 'efectivo' && v.estado === true)
-      .reduce((sum, v) => sum + v.total, 0);
+    // 🧾 Título hoja 1
+    hojaResumen.mergeCells('A1:G1');
+    hojaResumen.getCell('A1').value = `REPORTE GENERAL DE VENTAS - Fecha: ${fechaHoy}`;
+    aplicarEstilo(hojaResumen.getCell('A1'), estiloTitulo);
 
-    for (const element of ventas) {
-      if (element.tipo_pago == 'QR-EFECTIVO' && element.estado === true) {
-        totalQR += element.montoQR;
-        totalEfectivo += element.montoEfectivo;
+    hojaResumen.addRow([]);
+
+    // 🧮 Totales
+    let totalEfectivo = 0;
+    let totalQR = 0;
+    let totalAnuladas = 0;
+
+    for (const v of ventas) {
+      if (!v.estado) {
+        totalAnuladas += v.total;
+        continue;
+      }
+      if (v.tipo_pago.toLowerCase() === 'efectivo') totalEfectivo += v.total;
+      else if (v.tipo_pago.toLowerCase() === 'qr') totalQR += v.total;
+      else if (v.tipo_pago.toLowerCase() === 'qr-efectivo') {
+        totalQR += v.montoQR ?? 0;
+        totalEfectivo += v.montoEfectivo ?? 0;
       }
     }
 
-    // Mostrar total general
-    worksheet.mergeCells('A3:H3');
-    worksheet.getCell('A3').value = `Total de Ventas: Bs. ${totalVentas.toFixed(2)}`;
-    worksheet.getCell('A3').style = estiloTotal;
+    hojaResumen.mergeCells('A3:G3');
+    hojaResumen.getCell('A3').value = `Total Ventas en Efectivo: Bs. ${totalEfectivo.toFixed(2)}`;
+    aplicarEstilo(hojaResumen.getCell('A3'), estiloResumen);
 
-    // Total QR
-    worksheet.mergeCells('A4:H4');
-    worksheet.getCell('A4').value = `Total Pagado por QR: Bs. ${totalQR.toFixed(2)}`;
-    worksheet.getCell('A4').style = estiloTotal;
+    hojaResumen.mergeCells('A4:G4');
+    hojaResumen.getCell('A4').value = `Total Ventas en QR: Bs. ${totalQR.toFixed(2)}`;
+    aplicarEstilo(hojaResumen.getCell('A4'), estiloResumen);
 
-    // Total Efectivo
-    worksheet.mergeCells('A5:H5');
-    worksheet.getCell('A5').value = `Total Pagado en Efectivo: Bs. ${totalEfectivo.toFixed(2)}`;
-    worksheet.getCell('A5').style = estiloTotal;
+    hojaResumen.mergeCells('A5:G5');
+    hojaResumen.getCell('A5').value = `Total Ventas Anuladas: Bs. ${totalAnuladas.toFixed(2)}`;
+    aplicarEstilo(hojaResumen.getCell('A5'), estiloResumen);
 
+    hojaResumen.addRow([]);
+    hojaResumen.addRow([]);
 
-    // Encabezados
-    const encabezados = [
-      '#', 'Fecha', 'Cliente', 'Vendedor', 'Subtotal', 'Descuento', 'Total', 'Metodo de Pago'
+    // 📋 Encabezado del resumen
+    const encabezadosResumen = [
+      'Codigo',
+      'Cliente',
+      'Vendedor',
+      'Fecha',
+      'Subtotal',
+      'Descuento',
+      'Total',
+      'Método de Pago',
     ];
-    worksheet.addRow([]);
-    const encabezadoRow = worksheet.addRow(encabezados);
-    encabezadoRow.eachCell((cell) => {
-      cell.style = estiloEncabezado;
-    });
 
-    // Datos
+    const rowEncabezadoResumen = hojaResumen.addRow(encabezadosResumen);
+    rowEncabezadoResumen.eachCell(cell => aplicarEstilo(cell, estiloEncabezado));
+
+    // 🧩 Datos generales
     for (const venta of ventas) {
       const fecha = new Date(venta.fecha);
-      const fechaFormateada = `${fecha.getDate().toString().padStart(2, '0')}/${(fecha.getMonth() + 1).toString().padStart(2, '0')}/${fecha.getFullYear()} ${fecha.getHours().toString().padStart(2, '0')}:${fecha.getMinutes().toString().padStart(2, '0')}`;
+      const fechaFormateada = `${fecha.getDate().toString().padStart(2, '0')}/${(fecha.getMonth() + 1)
+        .toString()
+        .padStart(2, '0')}/${fecha.getFullYear()} ${fecha
+          .getHours()
+          .toString()
+          .padStart(2, '0')}:${fecha.getMinutes().toString().padStart(2, '0')}`;
 
-      const row = worksheet.addRow([
+      const fila = [
         venta.codigo,
-        fechaFormateada,
         venta.nombreCliente,
         venta.vendedor.fullName,
+        fechaFormateada,
         venta.subtotal,
         venta.descuento,
         venta.total,
         venta.tipo_pago,
-        venta.estado ? '' : 'ANULADO',
-        venta.estado ? '' : (venta.fechaAnulada ? new Date(venta.fechaAnulada).toLocaleString() : '—'),
-        venta.estado ? '' : venta.usuarioAnulador,
-      ]);
+      ];
 
-      row.eachCell((cell) =>
+      const row = hojaResumen.addRow(fila);
+      row.eachCell(cell =>
         aplicarEstilo(cell, venta.estado ? estiloDato : estiloAnulado)
       );
-
-      const hojaVenta = workbook.addWorksheet(`Venta ${venta.codigo}`);
-      const fechaAnulado = venta.fechaAnulada ? new Date(venta.fechaAnulada).toLocaleString() : '—';
-
-      // Datos organizados en dos columnas (2 celdas por fila)
-      const infoVenta = [
-        ['Número de Venta:', venta.codigo, 'Fecha:', fechaFormateada],
-        ['Cliente:', venta.nombreCliente, 'Método de Pago:', venta.tipo_pago],
-        ['Vendedor:', venta.vendedor.fullName, 'Subtotal:', venta.subtotal],
-        ['Descuento:', venta.descuento, 'Total:', venta.total],
-      ];
-
-      if (!venta.estado) {
-        infoVenta.push(['Estado:', 'ANULADO', 'Fecha de Anulación:', fechaAnulado]);
-        infoVenta.push(['Usuario Anulador:', venta.usuarioAnulador, '', '']);
-      }
-
-      // Espacio inicial
-      hojaVenta.addRow([]);
-      hojaVenta.addRow(['DETALLES DE LA VENTA']).getCell(1).font = { bold: true, size: 14 };
-      hojaVenta.addRow([]);
-
-      // Añadir datos en dos columnas
-      for (const fila of infoVenta) {
-        const row = hojaVenta.addRow(fila);
-        // Estilo para celdas
-        row.eachCell((cell, colNumber) => {
-          cell.font = colNumber % 2 !== 0 ? { bold: true } : { bold: false };
-          aplicarEstilo(cell, venta.estado ? estiloDato : estiloAnulado);
-        });
-      }
-
-      // Espacio antes del detalle de productos
-      hojaVenta.addRow([]);
-      hojaVenta.addRow(['DETALLES DE PRODUCTOS']).getCell(1).font = { bold: true, size: 14 };
-      hojaVenta.addRow([]);
-
-      // Encabezado tabla detalles
-      const encabezadoDetalles = ['PRODUCTO', 'CANTIDAD', 'CATEGORÍA', 'PRECIO UNITARIO', 'SUBTOTAL'];
-      const rowEncabezadoDetalle = hojaVenta.addRow(encabezadoDetalles);
-      rowEncabezadoDetalle.eachCell(cell => aplicarEstilo(cell, estiloEncabezado));
-
-      // Agregar productos
-      for (const det of venta.detalles) {
-        const subtotal = det.precio * det.cantidad;
-        const filaDetalle = hojaVenta.addRow([
-          det.nombreProducto,
-          det.cantidad,
-          det.inventario.product.categoria.nombre,
-          det.precio,
-          subtotal
-        ]);
-        filaDetalle.eachCell(cell => aplicarEstilo(cell, estiloDato));
-      }
-
-      // Ajuste de columnas
-      hojaVenta.columns = [
-        { width: 30 }, // Producto / label
-        { width: 20 }, // Valor
-        { width: 25 }, // Segundo label
-        { width: 20 }, // Segundo valor
-        { width: 20 }, // Subtotal en tabla
-      ];
-
     }
 
-    // Ajuste de columnas
-    worksheet.columns = [
-      { width: 10 },
-      { width: 15 },
+    hojaResumen.columns = [
       { width: 25 },
       { width: 25 },
+      { width: 20 },
       { width: 15 },
-      { width: 18 },
-      { width: 18 },
-      { width: 18 },
-      { width: 18 },
-      { width: 18 },
+      { width: 15 },
+      { width: 15 },
+      { width: 20 },
+      { width: 20 },
     ];
 
+    // 🧾 Título hoja 2
+    hojaDetalle.mergeCells('A1:F1');
+    hojaDetalle.getCell('A1').value = `DETALLE DE VENTAS - Fecha: ${fechaHoy}`;
+    aplicarEstilo(hojaDetalle.getCell('A1'), estiloTitulo);
+    hojaDetalle.addRow([]);
+
+    // 📋 Encabezado detalle
+    const encabezadosDetalle = [
+      'Código Venta',
+      'Producto',
+      'Categoría',
+      'Cantidad',
+      'Precio',
+      'Subtotal',
+    ];
+    const rowEncabezadoDetalle = hojaDetalle.addRow(encabezadosDetalle);
+    rowEncabezadoDetalle.eachCell(cell => aplicarEstilo(cell, estiloEncabezado));
+
+    // 📦 Detalles de productos
+    for (const venta of ventas) {
+      for (const det of venta.detalles) {
+
+        const fila = [
+          venta.codigo,
+          det.nombreProducto,
+          det.inventario?.product?.categoria?.nombre,
+          det.cantidad,
+          det.precio,
+          det.subtotal,
+        ];
+        const row = hojaDetalle.addRow(fila);
+        row.eachCell(cell =>
+          aplicarEstilo(cell, venta.estado ? estiloDato : estiloAnulado)
+        );
+      }
+    }
+
+    hojaDetalle.columns = [
+      { width: 15 },
+      { width: 30 },
+      { width: 20 },
+      { width: 12 },
+      { width: 15 },
+      { width: 15 },
+    ];
+
+    // 💾 Guardar archivo
     const filePath = `./reporte_ventas_${fechaHoy}.xlsx`;
     await workbook.xlsx.writeFile(filePath);
-
     return filePath;
   }
+
   async generarReporteGastos(gastos: Gasto[]) {
     const fechaHoy = new Date().toISOString().split('T')[0];
     const workbook = new ExcelJS.Workbook();
@@ -603,7 +569,7 @@ export class ExcelService {
 
     // Encabezados
     const encabezados = [
-      '#', 'PRODUCTO', 'MARCA', 'STOCK', 'MEDIDA', 'CATEGORIA'
+      '#', 'PRODUCTO', 'MARCA', 'STOCK', 'MEDIDA', 'CATEGORIA', 'ALMACEN', 'COSTO UNIT', 'EXPIRACION'
     ];
     worksheet.addRow([]);
     const encabezadoRow = worksheet.addRow(encabezados);
@@ -620,6 +586,9 @@ export class ExcelService {
         item.stock,
         item.product.unidad_medida,
         item.product.categoria.nombre,
+        item.almacen.nombre,
+        item.costoUnit,
+        item.fechaExpiracion,
       ]);
       row.eachCell((cell) => {
         cell.style = estiloDato;
@@ -636,135 +605,437 @@ export class ExcelService {
       { width: 18 },
       { width: 18 },
       { width: 18 },
+      { width: 18 },
+      { width: 18 },
+      { width: 18 },
 
     ];
 
-    const filePath = `./reporte_ventas_${fechaHoy}.xlsx`;
+    const filePath = `./reporte_inventario_${fechaHoy}.xlsx`;
     await workbook.xlsx.writeFile(filePath);
 
     return filePath;
   }
 
-  async generarReporteMovimientosProducto(fechaInicio: string, fechaFn: string, id_inventario: string) {
-    const fechaHoy = new Date().toISOString().split('T')[0];
-
-    const inv=await this.inventarioService.obtenerInfoProducto(id_inventario);
-
-    // Obtener movimientos desde el servicio
-    const movimientos = await this.movimientosService.obtenerMovimientosPorProducto(id_inventario, fechaInicio, fechaFn);
-
-    // Crear workbook y hoja
-    const workbook = new ExcelJS.Workbook();
-    const worksheet = workbook.addWorksheet('Movimientos Producto');
-
-    // Encabezado principal
-    worksheet.mergeCells('A1', 'F1');
-    worksheet.getCell('A1').value = `REPORTE DE MOVIMIENTOS DEL PRODUCTO - Fecha: ${fechaHoy}`;
-    worksheet.getCell('A1').style = {
-      font: { bold: true, size: 16, color: { argb: 'FFFFFFFF' } },
-      alignment: { horizontal: 'center', vertical: 'middle' },
-      fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: '4472C4' } }
-    };
-
-    worksheet.mergeCells('A2', 'F2');
-    worksheet.getCell('A2').value = `Producto: ${inv.product?.nombre || 'Desconocido'}`;
-    worksheet.getCell('A2').style = {
-      font: { bold: true, size: 12 },
-      alignment: { horizontal: 'left', vertical: 'middle' },
-      fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'D9E1F2' } }
-    };
-
-    worksheet.mergeCells('A3', 'F3');
-    worksheet.getCell('A3').value = `Periodo: ${fechaInicio} al ${fechaFn}`;
-    worksheet.getCell('A3').style = {
-      font: { bold: true, size: 12 },
-      alignment: { horizontal: 'left', vertical: 'middle' },
-      fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'D9E1F2' } }
-    };
-
-    // Fila vacía
-    worksheet.addRow([]);
-
-    // Encabezados tabla
-    const encabezado = ['#', 'FECHA', 'REFERENCIA', 'ALMACEN', 'CANTIDAD', 'TIPO'];
-    const headerRow = worksheet.addRow(encabezado);
-
-    headerRow.eachCell((cell) => {
-      cell.style = {
-        font: { bold: true, color: { argb: 'FFFFFFFF' } },
-        alignment: { horizontal: 'center', vertical: 'middle' },
-        fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: '4472C4' } },
-        border: {
-          top: { style: 'thin' },
-          bottom: { style: 'thin' },
-          left: { style: 'thin' },
-          right: { style: 'thin' }
-        }
-      };
+async generarReporteMovimientosProducto(
+  fechaInicio: string, 
+  fechaFin: string, 
+  id_inventario: string
+) {
+  try {
+    const fechaHoy = new Date();
+    const fechaFormateada = fechaHoy.toLocaleDateString('es-ES', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
+    const horaFormateada = fechaHoy.toLocaleTimeString('es-ES', {
+      hour: '2-digit',
+      minute: '2-digit'
     });
 
-    // Datos
+    // Obtener datos
+    const inv = await this.inventarioService.obtenerInfoProducto(id_inventario);
+    const movimientos = await this.movimientosService.obtenerMovimientosPorProducto(
+      id_inventario, 
+      fechaInicio, 
+      fechaFin
+    );
+
+    // Crear workbook
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'Sistema de Inventarios';
+    workbook.created = new Date();
+
+    // Hoja principal
+    const worksheet = workbook.addWorksheet('MOVIMIENTOS');
+    
+    // ===== ESTILOS REUTILIZABLES =====
+    const styles = {
+      headerMain: {
+        font: { bold: true, size: 18, color: { argb: 'FFFFFFFF' }, name: 'Calibri' },
+        alignment: { horizontal: 'center' as const, vertical: 'middle' as const, wrapText: true },
+        fill: { 
+          type: 'pattern' as const, 
+          pattern: 'solid' as const, 
+          fgColor: { argb: '2E5597' }
+        },
+        border: {
+          top: { style: 'medium' as const, color: { argb: '1F3864' } },
+          bottom: { style: 'medium' as const, color: { argb: '1F3864' } },
+          left: { style: 'medium' as const, color: { argb: '1F3864' } },
+          right: { style: 'medium' as const, color: { argb: '1F3864' } }
+        }
+      },
+      subHeader: {
+        font: { bold: true, size: 11, name: 'Calibri' },
+        alignment: { horizontal: 'left' as const, vertical: 'middle' as const },
+        fill: { 
+          type: 'pattern' as const, 
+          pattern: 'solid' as const, 
+          fgColor: { argb: 'E7EFF7' }
+        },
+        border: {
+          bottom: { style: 'thin' as const, color: { argb: 'B4C6E7' } }
+        }
+      },
+      tableHeader: {
+        font: { bold: true, size: 10, color: { argb: 'FFFFFF' }, name: 'Calibri' },
+        alignment: { horizontal: 'center' as const, vertical: 'middle' as const, wrapText: true },
+        fill: { 
+          type: 'pattern' as const, 
+          pattern: 'solid' as const, 
+          fgColor: { argb: '4472C4' }
+        },
+        border: {
+          top: { style: 'thin' as const, color: { argb: 'FFFFFF' } },
+          bottom: { style: 'thin' as const, color: { argb: 'FFFFFF' } },
+          left: { style: 'thin' as const, color: { argb: 'FFFFFF' } },
+          right: { style: 'thin' as const, color: { argb: 'FFFFFF' } }
+        }
+      },
+      dataRowEven: {
+        font: { size: 10, name: 'Calibri' },
+        alignment: { vertical: 'middle' as const },
+        fill: { 
+          type: 'pattern' as const, 
+          pattern: 'solid' as const, 
+          fgColor: { argb: 'FFFFFF' }
+        },
+        border: {
+          top: { style: 'thin' as const, color: { argb: 'D9D9D9' } },
+          bottom: { style: 'thin' as const, color: { argb: 'D9D9D9' } },
+          left: { style: 'thin' as const, color: { argb: 'D9D9D9' } },
+          right: { style: 'thin' as const, color: { argb: 'D9D9D9' } }
+        }
+      },
+      dataRowOdd: {
+        font: { size: 10, name: 'Calibri' },
+        alignment: { vertical: 'middle' as const },
+        fill: { 
+          type: 'pattern' as const, 
+          pattern: 'solid' as const, 
+          fgColor: { argb: 'F2F2F2' }
+        },
+        border: {
+          top: { style: 'thin' as const, color: { argb: 'D9D9D9' } },
+          bottom: { style: 'thin' as const, color: { argb: 'D9D9D9' } },
+          left: { style: 'thin' as const, color: { argb: 'D9D9D9' } },
+          right: { style: 'thin' as const, color: { argb: 'D9D9D9' } }
+        }
+      },
+      ingresoCell: {
+        font: { bold: true, color: { argb: '107C10' }, size: 10 },
+        fill: { 
+          type: 'pattern' as const, 
+          pattern: 'solid' as const, 
+          fgColor: { argb: 'C6EFCE' }
+        }
+      },
+      salidaCell: {
+        font: { bold: true, color: { argb: '9C0006' }, size: 10 },
+        fill: { 
+          type: 'pattern' as const, 
+          pattern: 'solid' as const, 
+          fgColor: { argb: 'FFC7CE' }
+        }
+      },
+      totalPositive: {
+        font: { bold: true, color: { argb: '107C10' }, size: 10 },
+        fill: { 
+          type: 'pattern' as const, 
+          pattern: 'solid' as const, 
+          fgColor: { argb: 'E2F0D9' }
+        }
+      },
+      totalNegative: {
+        font: { bold: true, color: { argb: '9C0006' }, size: 10 },
+        fill: { 
+          type: 'pattern' as const, 
+          pattern: 'solid' as const, 
+          fgColor: { argb: 'F2DCDB' }
+        }
+      }
+    };
+
+    // ===== ENCABEZADO PRINCIPAL =====
+    worksheet.mergeCells('A1', 'I1');
+    const titulo = worksheet.getCell('A1');
+    titulo.value = 'REPORTE DE MOVIMIENTOS DE PRODUCTO';
+    Object.assign(titulo.style, styles.headerMain);
+    titulo.style.font!.size = 20;
+
+    // ===== INFORMACIÓN DEL REPORTE =====
+    worksheet.mergeCells('A2', 'I2');
+    const infoReporte = worksheet.getCell('A2');
+    infoReporte.value = `Generado: ${fechaFormateada} - ${horaFormateada}`;
+    infoReporte.style = {
+      font: { italic: true, size: 9, color: { argb: '666666' }, name: 'Calibri' },
+      alignment: { horizontal: 'right' as const, vertical: 'middle' as const }
+    };
+
+    // ===== INFORMACIÓN DEL PRODUCTO =====
+    const infoProductoRows = [
+      [`Producto:`, inv.product?.nombre || 'Desconocido'],
+      [`Código:`, inv.product?.codigo || 'N/A'],
+      [`Categoría:`, inv.product?.categoria?.nombre || 'N/A'],
+      [`Existencia Actual:`, inv.stock * inv.costoUnit || 0],
+      [`Costo Promedio:`, inv.costoUnit ? `${inv.costoUnit.toFixed(2)}` : '$0.00'],
+      [`Período:`, `${fechaInicio} al ${fechaFin}`]
+    ];
+
+    let rowNum = 4;
+    infoProductoRows.forEach(([label, value]) => {
+      // Label
+      const labelCell = worksheet.getCell(`A${rowNum}`);
+      labelCell.value = label;
+      labelCell.style = {
+        font: { bold: true, size: 10, name: 'Calibri' },
+        fill: { 
+          type: 'pattern' as const, 
+          pattern: 'solid' as const, 
+          fgColor: { argb: 'F2F2F2' }
+        },
+        border: { right: { style: 'thin' as const, color: { argb: 'D9D9D9' } } }
+      };
+      
+      // Value
+      const valueCell = worksheet.getCell(`B${rowNum}`);
+      valueCell.value = value;
+      valueCell.style = {
+        font: { size: 10, name: 'Calibri' }
+      };
+      
+      worksheet.mergeCells(`B${rowNum}`, `C${rowNum}`);
+      rowNum++;
+    });
+
+    // Espacio antes de la tabla
+    const startDataRow = rowNum + 2;
+
+    // ===== ENCABEZADOS DE LA TABLA =====
+    const encabezados = [
+      { header: 'N°', key: 'numero', width: 6 },
+      { header: 'FECHA', key: 'fecha', width: 12 },
+      { header: 'REFERENCIA', key: 'referencia', width: 40 },
+      { header: 'ALMACÉN', key: 'almacen', width: 25 },
+      { header: 'CANTIDAD', key: 'cantidad', width: 12 },
+      { header: 'PPP.', key: 'costo', width: 15 },
+      { header: 'TOTAL', key: 'total', width: 15 },
+      { header: 'TIPO', key: 'tipo', width: 15 },
+      { header: 'EXISTENCIA', key: 'existencia', width: 12 }
+    ];
+
+    // Agregar encabezados
+    const headerRow = worksheet.getRow(startDataRow);
+    encabezados.forEach((col, index) => {
+      const cell = headerRow.getCell(index + 1);
+      cell.value = col.header;
+      Object.assign(cell.style, styles.tableHeader);
+    });
+    headerRow.height = 25;
+
+    // ===== DATOS DE MOVIMIENTOS =====
+    let totalIngresos = 0;
+    let totalSalidas = 0;
+    let saldoFinal = 0;
+    let existenciaAnterior = 0;
+
+    if (movimientos.length > 0) {
+      // Calcular existencia inicial (primera existencia - primer movimiento)
+      const primerMov = movimientos[0];
+      existenciaAnterior = (primerMov.existencia || 0) - 
+        (primerMov.tipo.toLowerCase() === 'ingreso' ? primerMov.cantidad : -primerMov.cantidad);
+    }
+
     movimientos.forEach((mov, index) => {
-      const row = worksheet.addRow([
+      const currentRowNum = startDataRow + index + 1;
+      const row = worksheet.getRow(currentRowNum);
+      
+      const costoUnit = mov.costoUnit || 0;
+      const total = mov.cantidad * costoUnit;
+      const esPar = index % 2 === 0;
+      
+      // Calcular existencia actual
+      const existenciaActual = existenciaAnterior + 
+        (mov.tipo.toLowerCase() === 'ingreso' ? mov.cantidad : -mov.cantidad);
+      
+      // Acumular totales
+      if (mov.tipo.toLowerCase() === 'ingreso') {
+        totalIngresos += total;
+      } else {
+        totalSalidas += total;
+      }
+      
+      saldoFinal = existenciaActual;
+
+      // Valores de la fila
+      const valores = [
         index + 1,
-        mov.fecha,
-        mov.descripcion || '',
+        new Date(mov.fecha).toLocaleDateString('es-ES'),
+        mov.descripcion || 'Sin referencia',
         mov.almacen?.nombre || 'Central',
         mov.cantidad,
-        mov.tipo,
-      ]);
+        costoUnit > 0 ? `${costoUnit.toFixed(2)}` : '$0.00',
+        total > 0 ? `${total.toFixed(2)}` : '$0.00',
+        mov.tipo.toUpperCase(),
+        existenciaActual
+      ];
 
-      const isIngreso = mov.tipo.toLowerCase() === 'ingreso';
-      const isSalida = mov.tipo.toLowerCase() === 'salida';
-
-      row.eachCell((cell, colNumber) => {
-        cell.style = {
-          alignment: { vertical: 'middle' },
-          border: {
-            top: { style: 'thin', color: { argb: 'D9D9D9' } },
-            bottom: { style: 'thin', color: { argb: 'D9D9D9' } },
-            left: { style: 'thin', color: { argb: 'D9D9D9' } },
-            right: { style: 'thin', color: { argb: 'D9D9D9' } }
-          }
-        };
-
-        if (isIngreso) {
-          cell.fill = {
-            type: 'pattern',
-            pattern: 'solid',
-            fgColor: { argb: 'C6EFCE' }
+      // Asignar valores y estilos
+      valores.forEach((valor, colIndex) => {
+        const cell = row.getCell(colIndex + 1);
+        cell.value = valor;
+        
+        // Estilo base de fila
+        const baseStyle = esPar ? styles.dataRowEven : styles.dataRowOdd;
+        Object.assign(cell.style, baseStyle);
+        
+        // Alineaciones específicas
+        if (colIndex === 0 || colIndex === 4 || colIndex === 8) {
+          cell.alignment = { 
+            ...cell.alignment, 
+            horizontal: 'center' as const 
           };
-          cell.font = { color: { argb: '006100' } };
-        } else if (isSalida) {
-          cell.fill = {
-            type: 'pattern',
-            pattern: 'solid',
-            fgColor: { argb: 'FFEB9C' }
-          };
-          cell.font = { color: { argb: '9C6500' } };
         }
-
-        if (colNumber === 1 || colNumber === 5) {
-          cell.alignment = { ...cell.alignment, horizontal: 'right' };
+        if (colIndex === 5 || colIndex === 6) {
+          cell.alignment = { 
+            ...cell.alignment, 
+            horizontal: 'right' as const 
+          };
+        }
+        
+        // Estilo para tipo de movimiento
+        if (colIndex === 7) {
+          if (mov.tipo.toLowerCase() === 'ingreso') {
+            Object.assign(cell.style, styles.ingresoCell);
+            cell.alignment = { 
+              ...cell.alignment, 
+              horizontal: 'center' as const 
+            };
+          } else {
+            Object.assign(cell.style, styles.salidaCell);
+            cell.alignment = { 
+              ...cell.alignment, 
+              horizontal: 'center' as const 
+            };
+          }
+        }
+        
+        // Estilo para cantidades negativas
+        if (colIndex === 4 && mov.tipo.toLowerCase() === 'salida') {
+          cell.font = { 
+            ...cell.font, 
+            color: { argb: '9C0006' } 
+          };
         }
       });
+      
+      row.height = 20;
+      
+      // Actualizar para siguiente iteración
+      existenciaAnterior = existenciaActual;
     });
 
-    // Ajustar ancho de columnas
-    worksheet.columns = [
-      { width: 6 },    // #
-      { width: 12 },   // Fecha
-      { width: 40 },   // Referencia
-      { width: 25 },   // Almacén
-      { width: 10 },   // Cantidad
-      { width: 12 },    // Tipo
-      { width: 12 }    // precio compra
+    // ===== TOTALES =====
+    const totalRowNum = startDataRow + movimientos.length + 2;
+    
+    // Fila de resumen
+    if (movimientos.length > 0) {
+      const resumenRow = worksheet.getRow(totalRowNum);
+      resumenRow.getCell(1).value = 'RESUMEN DEL PERÍODO:';
+      resumenRow.getCell(1).style = {
+        font: { bold: true, size: 11, name: 'Calibri' },
+        fill: { 
+          type: 'pattern' as const, 
+          pattern: 'solid' as const, 
+          fgColor: { argb: 'E7EFF7' } 
+        }
+      };
+      
+      // Totales
+      const totales = [
+        ['Total Ingresos:', totalIngresos, styles.totalPositive],
+        ['Total Salidas:', totalSalidas, styles.totalNegative],
+        ['Saldo Final:', saldoFinal, { 
+          font: { bold: true, size: 11, color: { argb: '1F3864' } },
+          fill: { 
+            type: 'pattern' as const, 
+            pattern: 'solid' as const, 
+            fgColor: { argb: 'D9E1F2' } 
+          }
+        }]
+      ];
+      
+      totales.forEach(([label, valor, estilo], index) => {
+        const row = worksheet.getRow(totalRowNum + index + 1);
+        
+        // Label
+        row.getCell(6).value = label as ExcelJS.CellValue;;
+        row.getCell(6).style = {
+          font: { bold: true, size: 10, name: 'Calibri' },
+          alignment: { horizontal: 'right' as const }
+        };
+        
+        // Valor
+        row.getCell(7).value = typeof valor === 'number' ? `${valor.toFixed(2)}` : valor as ExcelJS.CellValue;;
+        Object.assign(row.getCell(7).style, estilo);
+        row.getCell(7).style.alignment = { horizontal: 'right' as const };
+        row.getCell(7).style.border = {
+          top: { style: 'thin' as const, color: { argb: '1F3864' } },
+          bottom: { style: 'thin' as const, color: { argb: '1F3864' } },
+          left: { style: 'thin' as const, color: { argb: '1F3864' } },
+          right: { style: 'thin' as const, color: { argb: '1F3864' } }
+        };
+        
+        worksheet.mergeCells(`G${totalRowNum + index + 1}`, `H${totalRowNum + index + 1}`);
+      });
+    }
+
+    // ===== PIE DE PÁGINA =====
+    const footerRow = totalRowNum + (movimientos.length > 0 ? 4 : 2);
+    worksheet.mergeCells(`A${footerRow}`, `I${footerRow}`);
+    const footer = worksheet.getCell(`A${footerRow}`);
+    footer.value = `* Reporte generado automáticamente por el Sistema de Inventarios *`;
+    footer.style = {
+      font: { italic: true, size: 8, color: { argb: '999999' }, name: 'Calibri' },
+      alignment: { horizontal: 'center' as const, vertical: 'middle' as const }
+    };
+
+    // ===== CONGELAR PANELES =====
+    worksheet.views = [
+      { 
+        state: 'frozen' as const, 
+        xSplit: 0, 
+        ySplit: startDataRow, 
+        activeCell: `A${startDataRow + 1}` 
+      }
     ];
 
-    // Guardar archivo
-    const filePath = `./reporte_movimientos_producto_${fechaHoy}.xlsx`;
-    await workbook.xlsx.writeFile(filePath);
+    // ===== AJUSTAR ANCHOS =====
+    encabezados.forEach((col, index) => {
+      worksheet.getColumn(index + 1).width = col.width;
+    });
 
+    // ===== GUARDAR ARCHIVO =====
+    const nombreArchivo = `Movimientos_${inv.product?.codigo || 'Producto'}_${fechaInicio.replace(/-/g, '')}_${fechaFin.replace(/-/g, '')}.xlsx`;
+    const filePath = `./reportes/${nombreArchivo}`;
+    
+    // Crear directorio si no existe
+    const fs = require('fs');
+    const dir = './reportes';
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    
+    await workbook.xlsx.writeFile(filePath);
+    
+    console.log(`Reporte generado: ${filePath}`);
     return filePath;
+
+  } catch (error) {
+    console.error('Error generando reporte:', error);
+    throw error;
   }
+}
 }

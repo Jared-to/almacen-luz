@@ -625,7 +625,7 @@ export class VentasService {
     const inventario = await this.inventarioService.obtenerProductoPorAlmacenYProducto(almacen, id_product);
 
     if (tipo === 'venta') {
-      await this.inventarioService.descontarStockTransaccional({
+      const inventarioS = await this.inventarioService.descontarStockTransaccional({
         almacenId: almacen,
         cantidad: detalle.cantidad,
         productoId: id_product,
@@ -639,9 +639,10 @@ export class VentasService {
         descripcion: descripcion,
         sku,
         costoUnit: inventario.costoUnit,
+        inventario: inventarioS
       }, queryRunner);
     } else {
-      await this.inventarioService.agregarStockTransaccional({
+      const inventarioI = await this.inventarioService.agregarStockTransaccional({
         almacenId: almacen,
         cantidad: detalle.cantidad,
         productoId: id_product,
@@ -655,6 +656,7 @@ export class VentasService {
         descripcion: descripcion,
         sku,
         costoUnit: inventario.costoUnit,
+        inventario: inventarioI
       }, queryRunner);
     }
   }

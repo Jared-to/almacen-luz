@@ -25,9 +25,10 @@ export class MovimientosAlmacenService {
   // Registrar un ingreso
   async registrarIngreso(movimientoInventarioDto: MovimientoInventarioDto): Promise<MovimientoInventario> {
 
-    const { almacenId, cantidad, productoId, descripcion, sku, costoUnit } = movimientoInventarioDto;
+    const { almacenId, cantidad, productoId, descripcion, sku, costoUnit, inventario } = movimientoInventarioDto;
     const almacen = await this.almacenService.findOne(almacenId);
     const producto = await this.productoService.findOneProducto(productoId);
+
     const movimiento = this.movimientoRepository.create({
       almacen: almacen,
       product: { id: productoId },
@@ -38,7 +39,7 @@ export class MovimientosAlmacenService {
       nombreAlmacen: almacen.nombre,
       nombreProducto: producto.nombre,
       sku: sku,
-      existencia: costoUnit * cantidad,
+      existencia: inventario.stock,
       costoUnit,
     });
 
@@ -47,8 +48,8 @@ export class MovimientosAlmacenService {
   // Registrar una salida
   async registrarSalida(movimientoInventarioDto: MovimientoInventarioDto): Promise<MovimientoInventario> {
 
-    const { almacenId, cantidad, productoId, descripcion, sku, costoUnit } = movimientoInventarioDto;
-    const fechaLocal = new Date();
+    const { almacenId, cantidad, productoId, descripcion, sku, costoUnit, inventario } = movimientoInventarioDto;
+
     const producto = await this.productoService.findOneProducto(productoId);
     const almacen = await this.almacenService.findOne(almacenId);
 
@@ -62,7 +63,7 @@ export class MovimientosAlmacenService {
       nombreAlmacen: almacen.nombre,
       nombreProducto: producto.nombre,
       sku: sku,
-      existencia: costoUnit * cantidad,
+      existencia: inventario.stock,
       costoUnit
     });
 
@@ -70,7 +71,7 @@ export class MovimientosAlmacenService {
   }
   async registrarIngresoTransaccional(movimientoInventarioDto: MovimientoInventarioDto, queryRunner: QueryRunner): Promise<MovimientoInventario> {
 
-    const { almacenId, cantidad, productoId, descripcion, sku, costoUnit } = movimientoInventarioDto;
+    const { almacenId, cantidad, productoId, descripcion, sku, costoUnit, inventario } = movimientoInventarioDto;
     const fechaUTC = new Date()
     const almacen = await this.almacenService.findOne(almacenId);
     const producto = await queryRunner.manager.findOne(Producto, { where: { id: productoId } });
@@ -85,7 +86,7 @@ export class MovimientosAlmacenService {
       nombreAlmacen: almacen.nombre,
       nombreProducto: producto.nombre,
       sku: sku,
-      existencia: costoUnit * cantidad,
+      existencia: inventario.stock,
       costoUnit
     });
 
@@ -94,10 +95,11 @@ export class MovimientosAlmacenService {
   // Registrar una salida
   async registrarSalidaTransaccional(movimientoInventarioDto: MovimientoInventarioDto, queryRunner: QueryRunner): Promise<MovimientoInventario> {
 
-    const { almacenId, cantidad, productoId, descripcion, sku, costoUnit } = movimientoInventarioDto;
+    const { almacenId, cantidad, productoId, descripcion, sku, costoUnit, inventario } = movimientoInventarioDto;
     const fechaLocal = new Date();
     const almacen = await this.almacenService.findOne(almacenId);
     const producto = await this.productoService.findOneProducto(productoId);
+
     const movimiento = queryRunner.manager.create(MovimientoInventario, {
       almacen: { id: almacenId },
       product: { id: productoId },
@@ -107,7 +109,7 @@ export class MovimientosAlmacenService {
       fecha: moment().tz("America/La_Paz").toDate(),
       nombreAlmacen: almacen.nombre,
       nombreProducto: producto.nombre,
-      existencia: costoUnit * cantidad,
+      existencia: inventario.stock,
       costoUnit,
       sku: sku,
     });
@@ -120,7 +122,7 @@ export class MovimientosAlmacenService {
     queryRunner: QueryRunner
   ): Promise<MovimientoInventario> {
 
-    const { almacenId, cantidad, productoId, descripcion, sku, costoUnit } = movimientoInventarioDto;
+    const { almacenId, cantidad, productoId, descripcion, sku, costoUnit, inventario } = movimientoInventarioDto;
     const fechaUTC = new Date();
 
     // Busca el almacén usando el QueryRunner
@@ -138,7 +140,7 @@ export class MovimientosAlmacenService {
       descripcion,
       fecha: fechaUTC,
       nombreAlmacen: almacen.nombre,
-      existencia: costoUnit * cantidad,
+      existencia: inventario.stock,
       sku: sku,
       costoUnit
     });
@@ -146,8 +148,6 @@ export class MovimientosAlmacenService {
     // Guarda el movimiento usando el QueryRunner
     return queryRunner.manager.save(MovimientoInventario, movimiento);
   }
-
-
 
   // Obtener todos los movimientos
   async obtenerMovimientos(): Promise<MovimientoInventario[]> {

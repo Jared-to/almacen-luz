@@ -1,6 +1,6 @@
 import { Almacen } from "src/almacenes/entities/almacen.entity";
 import { Producto } from "src/productos/entities/producto.entity";
-import { Column, Entity, ManyToOne, PrimaryGeneratedColumn } from "typeorm";
+import { Column, CreateDateColumn, Entity, ManyToOne, PrimaryGeneratedColumn } from "typeorm";
 
 
 @Entity('inventario')
@@ -29,4 +29,10 @@ export class Inventario {
 
   @Column('date', { nullable: true })
   fechaExpiracion: Date;
+
+  @CreateDateColumn({
+    name: 'created_at',
+    type: 'timestamp',
+  })
+  createDate: Date;
 }

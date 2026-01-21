@@ -4,7 +4,7 @@ import { UpdateProductoDto } from './dto/update-producto.dto';
 import { Producto } from './entities/producto.entity';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Categoria } from 'src/categorias/entities/categoria.entity';
-import { QueryRunner, Repository } from 'typeorm';
+import { DataSource, QueryRunner, Repository } from 'typeorm';
 import { CloudinaryService } from 'src/cloudinary/cloudinary.service';
 import { InventarioService } from 'src/inventario/inventario.service';
 import { AlmacenesService } from 'src/almacenes/almacenes.service';
@@ -26,7 +26,8 @@ export class ProductosService {
     private readonly cloudinaryService: CloudinaryService,
 
     private readonly inventarioService: InventarioService,
-    private readonly almacenService: AlmacenesService,
+    private readonly dataSource: DataSource,
+
     private readonly movimientoInventario: MovimientosAlmacenService,
 
   ) { }
@@ -35,20 +36,33 @@ export class ProductosService {
   async createProducto(createProductoDto: CreateProductoDto, file?: Express.Multer.File): Promise<Producto> {
     const { categoriaId, stock, marca, almacen, sku, fechaExpiracion, precio_compra, precio_min_venta, precio_venta, ...productoData } = createProductoDto;
 
-    let imagesUrl
+    const queryRunner = this.dataSource.createQueryRunner();
+
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
     try {
-      const categoria = await this.categoriaRepository.findOne({ where: { id: categoriaId } });
+      // 1. Buscar la categoría
+      const categoria = await this.categoriaRepository.findOne({
+        where: { id: categoriaId },
+        transaction: false // No usar transacción aquí si es una consulta simple
+      });
+
       if (!categoria) {
         throw new NotFoundException(`Categoría con ID ${categoriaId} no encontrada`);
       }
+
+      // 2. Manejar la imagen
+      let imagesUrl: string;
       if (!file) {
         imagesUrl = 'https://res.cloudinary.com/dsuvpnp9u/image/upload/v1736440720/tli4lpfen5fucruno3l2.jpg';
       } else {
-        // Subir imágenes a Cloudinary
-        const uploadPromises = await this.cloudinaryService.uploadFile(file);
-        imagesUrl = uploadPromises.secure_url;
+        // Subir imágenes a Cloudinary (fuera de la transacción de BD)
+        const uploadResult = await this.cloudinaryService.uploadFile(file);
+        imagesUrl = uploadResult.secure_url;
       }
 
+      // 3. Crear y guardar el producto dentro de la transacción
       const producto = this.productoRepository.create({
         ...productoData,
         imagen: imagesUrl || null,
@@ -58,40 +72,56 @@ export class ProductosService {
         precioVentaMin: Number(precio_min_venta),
         precioCompraIn: Number(precio_compra)
       });
-      const productoGuardado = await this.productoRepository.save(producto);
 
-      // Generar el código basado en el increment
+      const productoGuardado = await queryRunner.manager.save(Producto, producto);
+
+      // 4. Generar el código basado en el increment
       productoGuardado.codigo = `P${productoGuardado.increment.toString().padStart(4, '0')}`;
+      const productoG = await queryRunner.manager.save(Producto, productoGuardado);
 
-      // Guardar nuevamente el producto con el código generado
-      const productoG = await this.productoRepository.save(productoGuardado);
-
-      //!ingreso al stock
-      await this.inventarioService.agregarStock({
+      // 5. Realizar ingreso al stock dentro de la transacción
+      const inventario = await this.inventarioService.agregarStockTransaccional({
         sku,
-        almacenId: almacen,//Tomar el unico almacen,
+        almacenId: almacen,
         cantidad: parseFloat(stock),
         productoId: productoG.id,
         fechaExpiracion,
         costoUnit: Number(precio_compra)
-      })
-      await this.movimientoInventario.registrarIngreso({
+      }, queryRunner);
+
+
+
+      // 6. Registrar movimiento de inventario dentro de la transacción
+      await this.movimientoInventario.registrarIngresoTransaccional({
         sku: sku,
         almacenId: almacen,
         cantidad: parseFloat(stock),
         productoId: productoG.id,
         descripcion: 'Producto Creado',
-        costoUnit: Number(precio_compra)
+        costoUnit: Number(precio_compra),
+        inventario
+      }, queryRunner);
 
-      })
+      // 7. Si todo salió bien, confirmar la transacción
+      await queryRunner.commitTransaction();
 
       return productoG;
 
     } catch (error) {
-      throw new Error(`Error al guardar el producto: ${error.message}`);
+      // 8. Si algo falló, hacer rollback
+      await queryRunner.rollbackTransaction();
+
+      // 10. Lanzar error apropiado
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+
+      throw new Error(`Error al crear el producto: ${error.message}`);
+    } finally {
+      // 11. Liberar el queryRunner siempre
+      await queryRunner.release();
     }
   }
-
   async createProductoExcel(createProductoDto: CreateProductoDto, queryRunner: QueryRunner): Promise<Producto> {
     const { categoriaId, almacen, sku, fechaExpiracion, precio_compra, precio_min_venta, precio_venta, ...productoData } = createProductoDto;
 
@@ -139,7 +169,7 @@ export class ProductosService {
       const productoG = await queryRunner.manager.save(Producto, productoGuardado);
 
 
-      await this.inventarioService.agregarStockTransaccional({
+      const inventario = await this.inventarioService.agregarStockTransaccional({
         almacenId: almacen,//Tomar el unico almacen,
         sku,
         cantidad: parseFloat(createProductoDto.stock),
@@ -152,8 +182,9 @@ export class ProductosService {
         sku,
         cantidad: parseFloat(createProductoDto.stock),
         productoId: productoG.id,
-        descripcion: 'Producto Creado por Excel',
+        descripcion: 'Producto Creado por Excel Inicial',
         costoUnit: Number(precio_compra),
+        inventario
       }, queryRunner)
 
       return productoG;
@@ -296,37 +327,7 @@ export class ProductosService {
     }
   }
 
-  // Eliminar un producto
-  async deleteProducto(id: string): Promise<Object> {
-    try {
 
-      // Busca el producto por ID
-      const producto = await this.productoRepository.findOne({ where: { id: id } });
-
-      // Si no se encuentra el producto, lanza un error
-      if (!producto) {
-        throw new NotFoundException(`Producto con ID ${id} no encontrado`);
-      }
-
-      // Eliminar imagen relacionada si no es la imagen predeterminada
-      if (producto.imagen !== 'https://res.cloudinary.com/dsuvpnp9u/image/upload/v1736440720/tli4lpfen5fucruno3l2.jpg') {
-        const publicId = this.extractPublicId(producto.imagen);
-        await this.cloudinaryService.deleteFile(publicId); // Eliminar de Cloudinary
-      }
-
-      // Elimina el producto de la base de datos
-      await this.productoRepository.remove(producto);
-
-      // Devuelve un mensaje de éxito
-      return {
-        message: "Producto eliminado con éxito.",
-      };
-    } catch (error) {
-      console.log(error);
-
-      throw new InternalServerErrorException(error);
-    }
-  }
 
   // Desactivar o activar producto
   async estadoProducto(id: string) {
@@ -354,9 +355,46 @@ export class ProductosService {
     };
   }
 
+  // Eliminar un producto
+  async deleteProducto(id: string): Promise<Object> {
+    try {
+
+      // Busca el producto por ID
+      const producto = await this.productoRepository.findOne({ where: { id: id } });
+
+      // Si no se encuentra el producto, lanza un error
+      if (!producto) {
+        throw new NotFoundException(`Producto con ID ${id} no encontrado`);
+      }
+
+      // Eliminar imagen relacionada si no es la imagen predeterminada
+      if (producto.imagen !== 'https://res.cloudinary.com/dsuvpnp9u/image/upload/v1736440720/tli4lpfen5fucruno3l2.jpg') {
+        const publicId = this.extractPublicId(producto.imagen);
+        await this.cloudinaryService.deleteFile(publicId); // Eliminar de Cloudinary
+      }
+
+      // Elimina logico el producto de la base de datos
+      producto.is_delete = true;
+
+
+      await this.productoRepository.save(producto)
+
+      // Devuelve un mensaje de éxito
+      return {
+        message: "Producto eliminado con éxito.",
+      };
+    } catch (error) {
+      console.log(error);
+
+      throw new InternalServerErrorException(error);
+    }
+  }
   // Traer todos los productos
   async findAllProductos(): Promise<any[]> {
-    const productos = await this.productoRepository.find({ relations: ['categoria'] });
+    const productos = await this.productoRepository.find({
+      where: { is_delete: false },
+      relations: ['categoria']
+    });
 
     return productos;
   }

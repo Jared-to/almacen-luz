@@ -41,8 +41,8 @@ export class Gasto {
 
   // Relación muchos a uno
   @ManyToOne(() => CategoriaGasto, (categoria) => categoria.gastos, {
-    nullable: false, // Hace obligatorio que cada gasto tenga una categoría
-    onDelete: 'CASCADE', // Elimina los gastos si se elimina la categoría
+    nullable: true,          // Permite que el producto quede sin categoría
+    onDelete: 'SET NULL',    // Si se elimina la categoría, se pone NULL
   })
   categoria: CategoriaGasto;
 

@@ -38,11 +38,17 @@ export class Producto {
   precioCompraIn: number;
   // Relación muchos a uno
   @ManyToOne(() => Categoria, (categoria) => categoria.productos, {
-    nullable: false, // Hace obligatorio que cada producto tenga una categoría
-    onDelete: 'CASCADE', // Elimina los productos si se elimina la categoría
+    nullable: true,          // Permite que el producto quede sin categoría
+    onDelete: 'SET NULL',    // Si se elimina la categoría, se pone NULL
   })
-  categoria: Categoria;
+  categoria: Categoria | null;
 
-  @CreateDateColumn()
-  createDate:Date
+  @Column('boolean', { default: false })
+  is_delete: boolean;
+
+  @CreateDateColumn({
+    name: 'created_at',
+    type: 'timestamp',
+  })
+  createDate: Date;
 }
